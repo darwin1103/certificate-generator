@@ -1,0 +1,145 @@
+StartFontMetrics 4.1
+Notice Converted by PHP-font-lib
+Comment https://github.com/dompdf/php-font-lib
+EncodingScheme FontSpecific
+Copyright © 2020 GGBot
+FontName E1234
+FontSubfamily Regular
+UniqueID E1234:Version 1.00
+FullName E1234
+Version Version 1.00;September 7, 2020
+PostScriptName E1234
+Designer GGBot
+FontDesignerURL https://ggbot.net
+LicenseDescription This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://scripts.sil.org/OFL
+LicenseURL https://scripts.sil.org/OFL
+Weight Medium
+ItalicAngle 0
+IsFixedPitch false
+UnderlineThickness 73
+UnderlinePosition -106
+FontHeightOffset 12
+Ascender 934
+Descender -205
+FontBBox 150 0 650 901
+StartCharMetrics 115
+U 0 ; WX 800 ; N .notdef ; G 0
+U 29 ; WX 800 ; N .notdef ; G 0
+U 32 ; WX 800 ; N space ; G 1
+U 33 ; WX 800 ; N exclam ; G 2
+U 34 ; WX 800 ; N quotedbl ; G 3
+U 39 ; WX 800 ; N quotesingle ; G 4
+U 40 ; WX 800 ; N parenleft ; G 5
+U 41 ; WX 800 ; N parenright ; G 6
+U 42 ; WX 800 ; N asterisk ; G 7
+U 43 ; WX 800 ; N plus ; G 8
+U 44 ; WX 800 ; N comma ; G 9
+U 45 ; WX 800 ; N hyphen ; G 10
+U 46 ; WX 800 ; N period ; G 11
+U 47 ; WX 800 ; N slash ; G 12
+U 48 ; WX 800 ; N zero ; G 13
+U 49 ; WX 800 ; N one ; G 14
+U 50 ; WX 800 ; N two ; G 15
+U 51 ; WX 800 ; N three ; G 16
+U 52 ; WX 800 ; N four ; G 17
+U 53 ; WX 800 ; N five ; G 18
+U 54 ; WX 800 ; N six ; G 19
+U 55 ; WX 800 ; N seven ; G 20
+U 56 ; WX 800 ; N eight ; G 21
+U 57 ; WX 800 ; N nine ; G 22
+U 58 ; WX 800 ; N colon ; G 23
+U 59 ; WX 800 ; N semicolon ; G 24
+U 60 ; WX 800 ; N less ; G 25
+U 61 ; WX 800 ; N equal ; G 26
+U 62 ; WX 800 ; N greater ; G 27
+U 63 ; WX 800 ; N question ; G 28
+U 64 ; WX 800 ; N at ; G 29
+U 65 ; WX 800 ; N A ; G 30
+U 66 ; WX 800 ; N B ; G 31
+U 67 ; WX 800 ; N C ; G 32
+U 68 ; WX 800 ; N D ; G 33
+U 69 ; WX 800 ; N E ; G 34
+U 70 ; WX 800 ; N F ; G 35
+U 71 ; WX 800 ; N G ; G 36
+U 72 ; WX 800 ; N H ; G 37
+U 73 ; WX 800 ; N I ; G 38
+U 74 ; WX 800 ; N J ; G 39
+U 75 ; WX 800 ; N K ; G 40
+U 76 ; WX 800 ; N L ; G 41
+U 77 ; WX 800 ; N M ; G 42
+U 78 ; WX 800 ; N N ; G 43
+U 79 ; WX 800 ; N O ; G 44
+U 80 ; WX 800 ; N P ; G 45
+U 81 ; WX 800 ; N Q ; G 46
+U 82 ; WX 800 ; N R ; G 47
+U 83 ; WX 800 ; N S ; G 48
+U 84 ; WX 800 ; N T ; G 49
+U 85 ; WX 800 ; N U ; G 50
+U 86 ; WX 800 ; N V ; G 51
+U 87 ; WX 800 ; N W ; G 52
+U 88 ; WX 800 ; N X ; G 53
+U 89 ; WX 800 ; N Y ; G 54
+U 90 ; WX 800 ; N Z ; G 55
+U 91 ; WX 800 ; N bracketleft ; G 56
+U 92 ; WX 800 ; N backslash ; G 57
+U 93 ; WX 800 ; N bracketright ; G 58
+U 94 ; WX 800 ; N asciicircum ; G 59
+U 95 ; WX 800 ; N underscore ; G 60
+U 97 ; WX 800 ; N a ; G 61
+U 98 ; WX 800 ; N b ; G 62
+U 99 ; WX 800 ; N c ; G 63
+U 100 ; WX 800 ; N d ; G 64
+U 101 ; WX 800 ; N e ; G 65
+U 102 ; WX 800 ; N f ; G 66
+U 103 ; WX 800 ; N g ; G 67
+U 104 ; WX 800 ; N h ; G 68
+U 105 ; WX 800 ; N i ; G 69
+U 106 ; WX 800 ; N j ; G 70
+U 107 ; WX 800 ; N k ; G 71
+U 108 ; WX 800 ; N l ; G 72
+U 109 ; WX 800 ; N m ; G 73
+U 110 ; WX 800 ; N n ; G 74
+U 111 ; WX 800 ; N o ; G 75
+U 112 ; WX 800 ; N p ; G 76
+U 113 ; WX 800 ; N q ; G 77
+U 114 ; WX 800 ; N r ; G 78
+U 115 ; WX 800 ; N s ; G 79
+U 116 ; WX 800 ; N t ; G 80
+U 117 ; WX 800 ; N u ; G 81
+U 118 ; WX 800 ; N v ; G 82
+U 119 ; WX 800 ; N w ; G 83
+U 120 ; WX 800 ; N x ; G 84
+U 121 ; WX 800 ; N y ; G 85
+U 122 ; WX 800 ; N z ; G 86
+U 123 ; WX 800 ; N braceleft ; G 87
+U 124 ; WX 800 ; N bar ; G 88
+U 125 ; WX 800 ; N braceright ; G 89
+U 126 ; WX 800 ; N asciitilde ; G 90
+U 160 ; WX 800 ; N space ; G 1
+U 161 ; WX 800 ; N exclamdown ; G 91
+U 166 ; WX 800 ; N brokenbar ; G 92
+U 172 ; WX 800 ; N logicalnot ; G 93
+U 173 ; WX 800 ; N hyphen ; G 10
+U 175 ; WX 800 ; N macron ; G 107
+U 176 ; WX 800 ; N degree ; G 94
+U 191 ; WX 800 ; N questiondown ; G 95
+U 362 ; WX 800 ; N Umacron ; G 108
+U 363 ; WX 800 ; N umacron ; G 109
+U 706 ; WX 800 ; N uni02C2 ; G 110
+U 707 ; WX 800 ; N uni02C3 ; G 111
+U 708 ; WX 800 ; N uni02C4 ; G 112
+U 709 ; WX 800 ; N uni02C5 ; G 113
+U 8211 ; WX 800 ; N endash ; G 96
+U 8212 ; WX 800 ; N emdash ; G 97
+U 8216 ; WX 800 ; N quoteleft ; G 98
+U 8217 ; WX 800 ; N quoteright ; G 99
+U 8218 ; WX 800 ; N quotesinglbase ; G 100
+U 8220 ; WX 800 ; N quotedblleft ; G 101
+U 8221 ; WX 800 ; N quotedblright ; G 102
+U 8222 ; WX 800 ; N quotedblbase ; G 103
+U 8249 ; WX 800 ; N guilsinglleft ; G 104
+U 8250 ; WX 800 ; N guilsinglright ; G 105
+U 8722 ; WX 800 ; N minus ; G 106
+U 9200 ; WX 800 ; N uni23F0 ; G 114
+EndCharMetrics
+EndFontMetrics
