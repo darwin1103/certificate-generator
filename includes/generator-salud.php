@@ -2,7 +2,10 @@
 
 function cc_formulario_salud() {
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generar_pdf_salud'])) {
+        error_log("---- INICIO SUBMIT FORMULARIO SALUD ----");
+        
         $datos = cc_capturar_datos_certificado($_POST, 'salud');
+        error_log("Datos capturados: " . print_r($datos, true));
 
         $empresa_id    = $datos['empresa_id'];
         $empresa_titulo = get_the_title($empresa_id);
@@ -14,28 +17,36 @@ function cc_formulario_salud() {
             'empresa_imagen' => $empresa_imagen,
             'contenido_email'=> $contenido_email,
         ];
+        error_log("Empresa info: " . print_r($empresa_info, true));
 
         $pdf_files = [];
         $pdf_links = [];
 
         foreach ($datos['cursos'] as $curso_id) {
             $curso_nombre = get_the_title($curso_id);
+            $curso_tipo = get_post_meta($curso_id, '_tipo_certificado', true);
             $intensidad_horaria = get_post_meta($curso_id, 'horas', true);
             $vigencia_certificado = get_post_meta($curso_id, 'fecha_expiracion_certificado', true);
 
             $datos_curso = [
                 'curso_nombre' => $curso_nombre,
+                'curso_tipo' => $curso_tipo,
                 'intensidad_horaria' => $intensidad_horaria,
                 'vigencia_certificado' => $vigencia_certificado,
             ];
+            error_log("Datos curso ID $curso_id: " . print_r($datos_curso, true));
 
+            // ----- GENERACIÓN DE HTML -----
             $html = cc_generar_html_certificado($datos_curso, $datos, $empresa_info, $empresa_imagen);
+            error_log("HTML generado para $curso_id: " . $html);
+
             $pdf_filename = "salud_certificado_{$datos['documento']}_{$curso_id}.pdf";
             $plugin_dir = plugin_dir_path(__FILE__);
             $certificados_dir = $plugin_dir . "certificados_salud/";
             $pdf_path = cc_guardar_pdf_certificado($html, $certificados_dir, $pdf_filename);
-            $pdf_url = plugins_url("certificados_salud/{$pdf_filename}", __FILE__);
+            error_log("PDF generado: $pdf_path");
 
+            $pdf_url = plugins_url("certificados_salud/{$pdf_filename}", __FILE__);
             cc_crear_post_certificado($datos, $datos_curso, $pdf_url, $empresa_info);
 
             $pdf_files[] = $pdf_path;
@@ -43,11 +54,14 @@ function cc_formulario_salud() {
         }
 
         $asunto = "Certificados Salud - " . $datos['nombre'];
+        error_log("Enviando correo a {$datos['email']} con archivos: " . print_r($pdf_files, true));
         $enviado = cc_enviar_certificados($datos['email'], $empresa_info['contenido_email'], $pdf_files, $asunto);
 
         if ($enviado) {
+            error_log("Correo enviado correctamente.");
             echo '<div class="notice notice-success"><p>Certificados generados y enviados correctamente.</p></div>';
         } else {
+            error_log("ERROR al enviar correo.");
             echo '<div class="notice notice-error"><p>Hubo un error al enviar el correo.</p></div>';
         }
         echo '<div class="notice notice-success"><p>Enlaces de descarga:</p><ul>';
@@ -55,7 +69,9 @@ function cc_formulario_salud() {
             echo '<li><a href="' . esc_url($link) . '" target="_blank">Descargar Certificado</a></li>';
         }
         echo '</ul></div>';
-    } ?>
+        error_log("---- FIN SUBMIT FORMULARIO SALUD ----");
+    }
+    ?>
     <!-- formulario HTML de salud -->
      <div class="wrap" style="width: 100%; max-width: 600px; text-align: left;">
     <h1>Generar Certificados de Salud</h1>

@@ -1,5 +1,9 @@
 <?php
 
+//Importar las dependencias necesarias
+use Dompdf\Dompdf;
+use Dompdf\Options;
+
 // 1. Captura y sanitiza los datos del formulario
 function cc_capturar_datos_certificado($post_data, $contexto = 'campus') {
     $datos = [];
@@ -34,27 +38,110 @@ function cc_generar_html_certificado($datos_curso, $datos_persona, $empresa_info
     <html lang="es">
     <head>
         <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Certificado</title>
         <style>
-            body { margin: 0; padding: 0; }
-            .main { margin-left: 12%; margin-top: 15%; }
-            .nombre { font-size: 20px; text-transform: uppercase; border-bottom: 2px solid #000; }
-            /* ...más estilos aquí... */
+            @page {
+                margin: 0;
+                padding: 0;
+            }
+            body {
+                margin: 0;
+                padding: 0;
+                font-family: 'constan', sans-serif;
+                color: #2e2e2e;
+                width: 100%;
+                height: 100vh;
+                position: relative;
+            }
+            .main {
+                position: relative;
+                z-index: 2;
+                width: 50%;
+                margin-top: 15%;
+                margin-left: 12%;
+            }
+            .titulo-campus {
+                font-size: 26px;
+                font-weight: bold;
+                margin-bottom: 5px;
+                text-align: left;
+                color: #162466;
+            }
+            .nit-campus {
+                font-size: 16px;
+                font-weight: 400;
+                margin-bottom: 32px;
+                text-align: left;
+                color: #555;
+            }
+            .certifica {
+                font-size: 19px;
+                margin-bottom: 12px;
+                font-weight: bold;
+                color: #152256;
+            }
+            .nombre {
+                font-size: 32px;
+                text-transform: uppercase;
+                font-weight: bold;
+                color: #1c315e;
+                border-bottom: 2px solid #1c315e;
+                display: inline-block;
+                margin-bottom: 8px;
+            }
+            .dato, .documento {
+                font-size: 16px;
+                margin: 3px 0;
+            }
+            .etiqueta {
+                font-weight: 600;
+            }
+            .nombre_curso {
+                font-size: 20px;
+                font-weight: bold;
+                margin: 6px 0 12px 0;
+                color: #235397;
+            }
+            .intensidad {
+                margin-bottom: 6px;
+                font-size: 16px;
+            }
+            .aviso {
+                font-size: 13px;
+                color: #383838;
+                margin-top: 16px;
+                margin-bottom: 10px;
+            }
+            .vigencia {
+                font-size: 13px;
+                color: #005521;
+                font-weight: 600;
+            }
         </style>
     </head>
     <body>
-        <img style="width: 100%; position: absolute;" src="<?php echo esc_url($imagen_fondo); ?>" alt="" />
+        <!-- Si quieres la imagen de fondo como <img>, descomenta la siguiente línea, pero dompdf prefiere CSS en @page -->
+        <img style="width: 100%; position: absolute; z-index:1;" src="<?php echo esc_url($imagen_fondo); ?>" alt="" />
+
         <div class="main">
-            <p>FUNDACIÓN EDUCATIVA CAMPUS <br>NIT: 901386251-7</p>
-            <p class="certifica">CERTIFICA QUE:</p>
-            <p class="nombre"><?php echo esc_html($nombre); ?></p>
-            <p>Identificado(a) con <?php echo esc_html($tipo_documento); ?></p>
-            <p>No° : <?php echo esc_html($documento); ?></p>
-            <p>Realizó y aprobó el <?php echo esc_html($empresa_titulo ?? $tipo_certificado); ?> de:</p>
-            <p class="nombre_curso"><?php echo esc_html($curso_nombre); ?></p>
-            <p>Con una intensidad horaria de: <?php echo esc_html($intensidad_horaria); ?></p>
-            <p>ESTE CERTIFICADO ES EXPEDIDO EN LA CIUDAD DE FUSAGASUGÁ EL <?php echo esc_html($fecha_expedicion); ?>, ...</p>
-            <p>VIGENCIA DE LA PRESENTE CERTIFICACIÓN DE ASISTENCIA ES DE <?php echo esc_html($vigencia_certificado); ?> A PARTIR DE LA GENERACIÓN DE LA MISMA</p>
+            <div class="titulo-campus">FUNDACIÓN EDUCATIVA CAMPUS</div>
+            <div class="nit-campus">NIT: 901386251-7</div>
+            <div class="certifica">CERTIFICA QUE:</div>
+            <div class="nombre"><?php echo esc_html($nombre); ?></div>
+            <div class="dato">Identificado(a) con <span class="etiqueta"><?php echo esc_html($tipo_documento); ?></span></div>
+            <div class="documento">No° : <span class="etiqueta"><?php echo esc_html($documento); ?></span></div>
+            <div class="dato">Realizó y aprobó el <b><?php echo esc_html($curso_tipo); ?></b> de:</div>
+            <div class="nombre_curso"><?php echo esc_html($curso_nombre); ?></div>
+            <div class="intensidad">Con una intensidad horaria de: <b><?php echo esc_html($intensidad_horaria); ?></b></div>
+
+            <div class="aviso">
+                ESTE CERTIFICADO ES EXPEDIDO EN LA CIUDAD DE FUSAGASUGÁ EL <b><?php echo esc_html($fecha_expedicion); ?></b>.<br>
+                LA PRESENTE CERTIFICACIÓN SE EXPIDE MEDIANTE MARCO NORMATIVO PARA LA EDUCACIÓN INFORMAL Y NO CONDUCE A TÍTULO ALGUNO O CERTIFICACIÓN DE APTITUD OCUPACIONAL.
+            </div>
+            <div class="vigencia">
+                VIGENCIA DE LA PRESENTE CERTIFICACIÓN DE ASISTENCIA ES DE <?php echo esc_html($vigencia_certificado); ?> A PARTIR DE LA GENERACIÓN DE LA MISMA.
+            </div>
         </div>
     </body>
     </html>

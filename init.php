@@ -12,10 +12,6 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// reference the Dompdf namespace
-use Dompdf\Dompdf;
-use Dompdf\Options;
-
 // Función para encolar estilos y scripts de Bootstrap y Select2
 function cc_enqueue_styles_and_scripts() {
     wp_enqueue_style('bootstrap-css', plugin_dir_url(__FILE__) . 'assets/css/bootstrap.min.css');
@@ -38,7 +34,9 @@ function cc_enqueue_styles_and_scripts() {
 add_action('admin_enqueue_scripts', 'cc_enqueue_styles_and_scripts');
 
 // Importa el autoloader de Composer
-require __DIR__ . '/vendor/autoload.php';
+if (file_exists(__DIR__ . '/vendor/autoload.php')) {
+    require_once __DIR__ . '/vendor/autoload.php';
+}
 
 // Cargar automáticamente todos los archivos PHP del directorio 'includes'
 foreach (glob(__DIR__ . '/includes/*.php') as $file) {
