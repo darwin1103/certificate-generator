@@ -180,13 +180,55 @@ function cc_guardar_pdf_certificado($html, $directorio, $nombre_archivo) {
     $dompdf->setPaper('A4', 'landscape');
     $dompdf->render();
 
-    if (!file_exists($directorio)) {
-        mkdir($directorio, 0755, true);
-    }
+    // Revisar settings
+    $usar_gcs = get_option('cc_certificados_gcs_enabled', false);
+    $bucket_name = get_option('cc_certificados_gcs_bucket');
+    $keyfile = get_option('cc_certificados_gcs_keyfile');
 
-    $pdf_path = $directorio . $nombre_archivo;
-    file_put_contents($pdf_path, $dompdf->output());
-    return $pdf_path;
+    if ($usar_gcs && $bucket_name && $keyfile && file_exists($keyfile)) {
+        // --- SUBIR A GCS ---
+        $storage = new StorageClient([
+            'keyFilePath' => $keyfile,
+        ]);
+        $bucket = $storage->bucket($bucket_name);
+
+        // Creamos el stream temporal
+        $pdf_content = $dompdf->output();
+        $stream = fopen('php://temp', 'r+');
+        fwrite($stream, $pdf_content);
+        rewind($stream);
+
+        // Subimos el archivo
+        $object = $bucket->upload(
+            $stream,
+            [
+                'name' => $nombre_archivo,
+                'predefinedAcl' => 'publicRead',
+            ]
+        );
+        fclose($stream);
+
+        // Construir URL pública
+        $public_url = sprintf('https://storage.googleapis.com/%s/%s', $bucket_name, $nombre_archivo);
+        return $public_url;
+    } else {
+        // --- GUARDAR EN LOCAL ---
+        if (!file_exists($directorio)) {
+            mkdir($directorio, 0755, true);
+        }
+        $pdf_path = $directorio . $nombre_archivo;
+        file_put_contents($pdf_path, $dompdf->output());
+
+        // Devuelve la URL pública local
+        $upload_dir = wp_upload_dir();
+        // Detecta si la ruta es dentro de uploads
+        if (strpos($pdf_path, $upload_dir['basedir']) === 0) {
+            $relative = str_replace($upload_dir['basedir'], '', $pdf_path);
+            return $upload_dir['baseurl'] . $relative;
+        }
+        // Si no está en uploads, solo devuelve el path absoluto (poco recomendable)
+        return $pdf_path;
+    }
 }
 
 // 4. Crea el post certificado y guarda metadatos

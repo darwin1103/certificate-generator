@@ -48,8 +48,7 @@ function cc_formulario_salud() {
             $pdf_path = cc_guardar_pdf_certificado($html, $certificados_dir, $pdf_filename);
             error_log("PDF generado: $pdf_path");
 
-            $pdf_url = $certificados_url . $pdf_filename;
-            cc_crear_post_certificado($datos, $datos_curso, $pdf_url, $empresa_info);
+            cc_crear_post_certificado($datos, $datos_curso, $pdf_path, $empresa_info);
 
             $pdf_files[] = $pdf_path;
             $pdf_links[] = $pdf_url;
