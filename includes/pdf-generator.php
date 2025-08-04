@@ -92,6 +92,7 @@ function cc_generar_html_certificado($datos_curso, $datos_persona, $empresa_info
             }
             .titulo-campus {
                 font-size: 24px;
+                text-transform: uppercase !important;
                 font-weight: bold;
                 margin-bottom: 5px;
                 text-align: left;
@@ -144,8 +145,8 @@ function cc_generar_html_certificado($datos_curso, $datos_persona, $empresa_info
         <img style="width: 100%; position: absolute; z-index:1;" src="<?php echo esc_url($imagen_fondo); ?>" alt="" />
 
         <div class="main">
-            <div class="titulo-campus">FUNDACIÓN EDUCATIVA CAMPUS</div>
-            <div class="nit-campus">NIT: 901386251-7</div>
+            <div class="titulo-campus"><?php echo get_option('cc_certificados_nombre_empresa'); ?></div>
+            <div class="nit-campus">NIT: <?php get_option('cc_certificados_nit_empresa'); ?></div>
             <div class="certifica">CERTIFICA QUE:</div>
             <div class="nombre"><?php echo esc_html($nombre); ?></div>
             <div class="dato">Identificado(a) con <span class="etiqueta"><?php echo esc_html($tipo_documento); ?></span></div>
