@@ -113,7 +113,8 @@ function cc_guardar_metabox_email_contenido_empresa($post_id) {
     // Validar permisos
     if (!current_user_can('edit_post', $post_id)) return;
     // Validar tipo de post
-    if (get_post_type($post_id) !== 'empresa') return;
+    $post_type = get_post_type($post_id);
+    if ($post_type !== 'empresa' && $post_type !== 'empresa_campus') return;
 
     if (isset($_POST['contenido_email'])) {
         // Usa wp_kses_post para permitir HTML seguro de editor visual

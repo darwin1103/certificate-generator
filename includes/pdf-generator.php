@@ -4,6 +4,15 @@
 use Dompdf\Dompdf;
 use Dompdf\Options;
 
+// Importar fuentes
+$font_path = plugin_dir_path(__FILE__) . 'assets/fonts/constan.ttf';
+// Para windows, cambia las \ por /
+$font_path = str_replace('\\', '/', $font_path);
+// Agrega el prefijo "file://"
+$font_path_uri = 'file://'.$font_path;
+
+
+
 // 1. Captura y sanitiza los datos del formulario
 function cc_capturar_datos_certificado($post_data, $contexto = 'campus') {
     $datos = [];
@@ -13,15 +22,16 @@ function cc_capturar_datos_certificado($post_data, $contexto = 'campus') {
     $datos['tipo_documento']   = isset($post_data['tipo_documento']) ? sanitize_text_field($post_data['tipo_documento']) : 'Cédula de Ciudadanía';
     $datos['fecha_expedicion'] = sanitize_text_field($post_data['fecha_expedicion_certificado']);
     $datos['cursos']           = isset($post_data['curso_salud']) ? (array) $post_data['curso_salud'] : [];
+    $datos['email_meta']   = '_contenido_email';
+
     // Empresa depende del contexto
     if ($contexto === 'campus') {
-        $datos['empresa_id']  = sanitize_text_field($post_data['empresa_dev']);
-        $datos['empresa_tipo'] = 'empresa_dev';
-        $datos['email_meta']   = '_js_dev_contenido_email';
+        $datos['empresa_id']  = sanitize_text_field($post_data['empresa_campus']);
+        $datos['empresa_tipo'] = 'empresa_campus';
+        
     } else {
         $datos['empresa_id']  = sanitize_text_field($post_data['empresa_salud']);
         $datos['empresa_tipo'] = 'empresa';
-        $datos['email_meta']   = '_contenido_email';
     }
     return $datos;
 }
@@ -41,6 +51,12 @@ function cc_generar_html_certificado($datos_curso, $datos_persona, $empresa_info
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Certificado</title>
         <style>
+            @font-face {
+                font-family: 'constan';
+                src: url('<?php echo $font_path_uri; ?>') format('truetype');
+                font-weight: normal;
+                font-style: normal;
+            }
             @page {
                 margin: 0;
                 padding: 0;
@@ -48,7 +64,7 @@ function cc_generar_html_certificado($datos_curso, $datos_persona, $empresa_info
             body {
                 margin: 0;
                 padding: 0;
-                font-family: 'constan', sans-serif;
+                font-family: constan, sans-serif;
                 color: #2e2e2e;
                 width: 100%;
                 height: 100vh;
@@ -61,12 +77,24 @@ function cc_generar_html_certificado($datos_curso, $datos_persona, $empresa_info
                 margin-top: 15%;
                 margin-left: 12%;
             }
+            .titulo-campus,
+            .nit-campus,
+            .certifica,
+            .nombre,
+            .dato,
+            .etiqueta,
+            .documento,
+            .nombre_curso,
+            .intensidad,
+            .aviso,
+            .vigencia {
+            font-family: 'constan' !important;
+            }
             .titulo-campus {
-                font-size: 26px;
+                font-size: 24px;
                 font-weight: bold;
                 margin-bottom: 5px;
                 text-align: left;
-                color: #162466;
             }
             .nit-campus {
                 font-size: 16px;
@@ -76,17 +104,15 @@ function cc_generar_html_certificado($datos_curso, $datos_persona, $empresa_info
                 color: #555;
             }
             .certifica {
-                font-size: 19px;
+                font-size: 20px;
                 margin-bottom: 12px;
                 font-weight: bold;
-                color: #152256;
             }
             .nombre {
-                font-size: 32px;
+                font-size: 24px;
                 text-transform: uppercase;
                 font-weight: bold;
-                color: #1c315e;
-                border-bottom: 2px solid #1c315e;
+                border-bottom: 2px solid;
                 display: inline-block;
                 margin-bottom: 8px;
             }
@@ -94,34 +120,27 @@ function cc_generar_html_certificado($datos_curso, $datos_persona, $empresa_info
                 font-size: 16px;
                 margin: 3px 0;
             }
-            .etiqueta {
-                font-weight: 600;
-            }
             .nombre_curso {
                 font-size: 20px;
                 font-weight: bold;
                 margin: 6px 0 12px 0;
-                color: #235397;
             }
             .intensidad {
                 margin-bottom: 6px;
                 font-size: 16px;
             }
             .aviso {
-                font-size: 13px;
-                color: #383838;
+                font-size: 12px;
                 margin-top: 16px;
-                margin-bottom: 10px;
+                margin-bottom: 8px;
             }
             .vigencia {
-                font-size: 13px;
-                color: #005521;
-                font-weight: 600;
+                font-size: 12px;
+                text-transform: uppercase !important;
             }
         </style>
     </head>
     <body>
-        <!-- Si quieres la imagen de fondo como <img>, descomenta la siguiente línea, pero dompdf prefiere CSS en @page -->
         <img style="width: 100%; position: absolute; z-index:1;" src="<?php echo esc_url($imagen_fondo); ?>" alt="" />
 
         <div class="main">
@@ -132,11 +151,11 @@ function cc_generar_html_certificado($datos_curso, $datos_persona, $empresa_info
             <div class="dato">Identificado(a) con <span class="etiqueta"><?php echo esc_html($tipo_documento); ?></span></div>
             <div class="documento">No° : <span class="etiqueta"><?php echo esc_html($documento); ?></span></div>
             <div class="dato">Realizó y aprobó el <b><?php echo esc_html($curso_tipo); ?></b> de:</div>
-            <div class="nombre_curso"><?php echo esc_html($curso_nombre); ?></div>
+            <div class="nombre_curso" style="font-family: constan;"><?php echo esc_html($curso_nombre); ?></div>
             <div class="intensidad">Con una intensidad horaria de: <b><?php echo esc_html($intensidad_horaria); ?></b></div>
 
             <div class="aviso">
-                ESTE CERTIFICADO ES EXPEDIDO EN LA CIUDAD DE FUSAGASUGÁ EL <b><?php echo esc_html($fecha_expedicion); ?></b>.<br>
+                ESTE CERTIFICADO ES EXPEDIDO EN LA CIUDAD DE FUSAGASUGÁ EL <?php echo esc_html($fecha_expedicion); ?>.<br>
                 LA PRESENTE CERTIFICACIÓN SE EXPIDE MEDIANTE MARCO NORMATIVO PARA LA EDUCACIÓN INFORMAL Y NO CONDUCE A TÍTULO ALGUNO O CERTIFICACIÓN DE APTITUD OCUPACIONAL.
             </div>
             <div class="vigencia">

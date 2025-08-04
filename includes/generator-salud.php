@@ -38,15 +38,17 @@ function cc_formulario_salud() {
 
             // ----- GENERACIÓN DE HTML -----
             $html = cc_generar_html_certificado($datos_curso, $datos, $empresa_info, $empresa_imagen);
-            error_log("HTML generado para $curso_id: " . $html);
+            error_log("HTML generado para $curso_id");
 
-            $pdf_filename = "salud_certificado_{$datos['documento']}_{$curso_id}.pdf";
-            $plugin_dir = plugin_dir_path(__FILE__);
-            $certificados_dir = $plugin_dir . "certificados_salud/";
+            $timestamp = date('Ymd_His');
+            $pdf_filename = "salud_certificado_{$datos['documento']}_{$curso_id}_{$timestamp}.pdf";
+            $upload_dir = wp_upload_dir();
+            $certificados_dir = $upload_dir['basedir'] . '/certificados_salud/';
+            $certificados_url = $upload_dir['baseurl'] . '/certificados_salud/';
             $pdf_path = cc_guardar_pdf_certificado($html, $certificados_dir, $pdf_filename);
             error_log("PDF generado: $pdf_path");
 
-            $pdf_url = plugins_url("certificados_salud/{$pdf_filename}", __FILE__);
+            $pdf_url = $certificados_url . $pdf_filename;
             cc_crear_post_certificado($datos, $datos_curso, $pdf_url, $empresa_info);
 
             $pdf_files[] = $pdf_path;
@@ -59,16 +61,16 @@ function cc_formulario_salud() {
 
         if ($enviado) {
             error_log("Correo enviado correctamente.");
-            echo '<div class="notice notice-success"><p>Certificados generados y enviados correctamente.</p></div>';
-        } else {
-            error_log("ERROR al enviar correo.");
-            echo '<div class="notice notice-error"><p>Hubo un error al enviar el correo.</p></div>';
-        }
-        echo '<div class="notice notice-success"><p>Enlaces de descarga:</p><ul>';
+            echo '<div class="notice notice-success"><p>Certificados generados y enviados correctamente.</p>';
+            echo '<p>Enlaces de descarga:</p><ul>';
         foreach ($pdf_links as $link) {
             echo '<li><a href="' . esc_url($link) . '" target="_blank">Descargar Certificado</a></li>';
         }
         echo '</ul></div>';
+        } else {
+            error_log("ERROR al enviar correo.");
+            echo '<div class="notice notice-error"><p>Hubo un error al enviar el correo.</p></div>';
+        }
         error_log("---- FIN SUBMIT FORMULARIO SALUD ----");
     }
     ?>
@@ -137,7 +139,7 @@ function cc_formulario_salud() {
         </div>
         <div class="mb-3">
             <label for="fecha_expedicion" class="form-label">Fecha de Expedición:</label>
-            <input type="date" id="fecha_expedicion" name="fecha_expedicion_certificado" value="<?php echo esc_attr(date('Y-m-d')); ?>" class="form-control" required>
+            <input type="date" id="fecha_expedicion" name="fecha_expedicion_certificado" value="<?php echo esc_attr(date('Y-m-d', current_time('timestamp'))); ?>" class="form-control" required>
         </div>
         <button type="submit" name="generar_pdf_salud" class="btn btn-primary">Generar Certificados</button>
     </form>
