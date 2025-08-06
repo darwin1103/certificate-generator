@@ -7,19 +7,21 @@ function cc_formulario_campus() {
         $datos = cc_capturar_datos_certificado($_POST, 'campus');
         error_log("Datos capturados: " . print_r($datos, true));
 
-        $empresa_id    = $datos['empresa_id'];
+        // CLAVE: Asegúrate que el 'empresa_id' esté correcto (debe venir de 'empresa_campus')
+        $empresa_id = $datos['empresa_id'];
         $empresa_titulo = get_the_title($empresa_id);
         $empresa_imagen = get_the_post_thumbnail_url($empresa_id, 'full') ?: plugins_url('assets/certificados_campus/default_background.jpg', __FILE__);
+        $asunto_email = get_post_meta($empresa_id, $datos['email_subject'], true) ?: 'Certificado Generado - ' . $empresa_titulo;
         $contenido_email = get_post_meta($empresa_id, $datos['email_meta'], true);
 
         $empresa_info = [
             'empresa_titulo' => $empresa_titulo,
             'empresa_imagen' => $empresa_imagen,
+            'empresa_asunto' => $asunto_email,
             'contenido_email'=> $contenido_email,
         ];
         error_log("Empresa info: " . print_r($empresa_info, true));
 
-        $pdf_files = [];
         $pdf_links = [];
 
         foreach ($datos['cursos'] as $curso_id) {
@@ -37,7 +39,7 @@ function cc_formulario_campus() {
             ];
             error_log("Datos curso ID $curso_id: " . print_r($datos_curso, true));
 
-            // ----- GENERACIÓN DE HTML -----
+            // --- GENERACIÓN DE HTML ---
             $html = cc_generar_html_certificado($datos_curso, $datos, $empresa_info, $empresa_imagen);
             error_log("HTML generado para $curso_id");
 
@@ -45,22 +47,16 @@ function cc_formulario_campus() {
             $pdf_filename = "campus_certificado_{$datos['documento']}_{$curso_id}_{$timestamp}.pdf";
             $upload_dir = wp_upload_dir();
             $certificados_dir = $upload_dir['basedir'] . '/certificados_campus/';
-            $certificados_url = $upload_dir['baseurl'] . '/certificados_campus/';
-            $pdf_path = cc_guardar_pdf_certificado($html, $certificados_dir, $pdf_filename);
-            error_log("PDF generado: $pdf_path");
+            $pdf_url = cc_guardar_pdf_certificado($html, $certificados_dir, $pdf_filename);
+            error_log("PDF generado: $pdf_url");
 
-            cc_crear_post_certificado($datos, $datos_curso, $pdf_path, $empresa_info);
+            cc_crear_post_certificado($datos, $datos_curso, $pdf_url, $empresa_info);
 
-            $pdf_files[] = $pdf_path;
             $pdf_links[] = $pdf_url;
         }
 
-        $asunto = "Certificados Campus - " . $datos['nombre'];
-        error_log("Enviando correo a {$datos['email']} con archivos: " . print_r($pdf_files, true));
-        foreach ($pdf_files as $file) {
-            error_log("¿El archivo existe?: $file => " . (file_exists($file) ? 'Sí' : 'No'));
-        }
-        $enviado = cc_enviar_certificados($datos['email'], $empresa_info['contenido_email'], $pdf_files, $asunto);
+        error_log("Enviando correo a {$datos['email']} con enlaces: " . print_r($pdf_links, true));
+        $enviado = cc_enviar_certificados($datos['email'], $empresa_info['contenido_email'], $pdf_links, $empresa_info['empresa_asunto']);
 
         if ($enviado) {
             error_log("Correo enviado correctamente.");
@@ -118,7 +114,7 @@ function cc_formulario_campus() {
             </select>
             <small>Puedes seleccionar varios cursos con Ctrl/Cmd.</small>
         </div>
-        <!-- Selección de empresa_dev -->
+        <!-- Selección de empresa -->
         <div class="mb-3">
             <label for="empresa_campus">Tipo de certificado:</label>
             <select name="empresa_campus" id="empresa_campus" class="form-control" required>
@@ -155,6 +151,7 @@ function cc_formulario_campus() {
         });
     });
     </script>
-<?php    
+<?php
 }
+
 

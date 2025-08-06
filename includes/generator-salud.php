@@ -10,11 +10,13 @@ function cc_formulario_salud() {
         $empresa_id    = $datos['empresa_id'];
         $empresa_titulo = get_the_title($empresa_id);
         $empresa_imagen = get_the_post_thumbnail_url($empresa_id, 'full') ?: plugins_url('assets/certificados_salud/default_background.jpg', __FILE__);
+        $asunto_email = get_post_meta($empresa_id, $datos['email_subject'], true) ?: 'Certificado Generado - ' . $empresa_titulo;
         $contenido_email = get_post_meta($empresa_id, $datos['email_meta'], true);
 
         $empresa_info = [
             'empresa_titulo' => $empresa_titulo,
             'empresa_imagen' => $empresa_imagen,
+            'empresa_asunto' => $asunto_email,
             'contenido_email'=> $contenido_email,
         ];
         error_log("Empresa info: " . print_r($empresa_info, true));
@@ -45,18 +47,16 @@ function cc_formulario_salud() {
             $upload_dir = wp_upload_dir();
             $certificados_dir = $upload_dir['basedir'] . '/certificados_salud/';
             $certificados_url = $upload_dir['baseurl'] . '/certificados_salud/';
-            $pdf_path = cc_guardar_pdf_certificado($html, $certificados_dir, $pdf_filename);
-            error_log("PDF generado: $pdf_path");
+            $pdf_url = cc_guardar_pdf_certificado($html, $certificados_dir, $pdf_filename);
+            error_log("PDF generado: $pdf_url");
 
-            cc_crear_post_certificado($datos, $datos_curso, $pdf_path, $empresa_info);
+            cc_crear_post_certificado($datos, $datos_curso, $pdf_url, $empresa_info);
 
-            $pdf_files[] = $pdf_path;
             $pdf_links[] = $pdf_url;
         }
 
-        $asunto = "Certificados Salud - " . $datos['nombre'];
         error_log("Enviando correo a {$datos['email']} con archivos: " . print_r($pdf_files, true));
-        $enviado = cc_enviar_certificados($datos['email'], $empresa_info['contenido_email'], $pdf_files, $asunto);
+        $enviado = cc_enviar_certificados($datos['email'], $empresa_info['contenido_email'], $pdf_links, $empresa_info['empresa_asunto']);
 
         if ($enviado) {
             error_log("Correo enviado correctamente.");

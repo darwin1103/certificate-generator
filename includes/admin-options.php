@@ -156,34 +156,31 @@ function cc_certificados_settings_page_cb() {
                             if ($key_path && file_exists($key_path) && $bucket) {
                                 try {
                                     require_once __DIR__ . '/../vendor/autoload.php';
-                                    error_log("Probando autenticación GCS con keyfile: $key_path y bucket: $bucket");
                                     $storage = new Google\Cloud\Storage\StorageClient([
                                         'keyFilePath' => $key_path,
                                     ]);
+                                    error_log('Intentando conectar con el bucket: ' . $bucket);
                                     $bucket_obj = $storage->bucket($bucket);
-                                    if ($bucket_obj->exists()) {
-                                        echo '<br><span style="color:green;font-weight:bold;">Autenticado correctamente con GCS ✅</span>';
-                                        error_log("Autenticación correcta con GCS y bucket $bucket");
 
+                                    if ($bucket_obj && $bucket_obj->exists()) {
+                                        echo '<br><span style="color:green;font-weight:bold;">Autenticado correctamente con GCS ✅</span>';
+                                        // Prueba de subida sin predefinedAcl
                                         try {
                                             $object = $bucket_obj->upload('test-content', [
                                                 'name' => 'test-file.txt',
-                                                'predefinedAcl' => 'publicRead', // Opcional, si quieres que sea público
                                             ]);
-                                            echo '<br><span style="color:green;font-weight:bold;">¡Test de subida exitoso! ✅</span>';
-                                            $object->delete(); // Limpia el archivo de prueba
+                                            echo '<br><span style="color:green;">¡Test de subida exitoso!</span>';
+                                            $object->delete();
                                         } catch (Exception $e) {
-                                            echo '<br><span style="color:red;font-weight:bold;">Error al subir archivo de prueba: ' . esc_html($e->getMessage()) . '</span>';
+                                            echo '<br><span style="color:red;">Error al subir archivo de prueba: ' . esc_html($e->getMessage()) . '</span>';
                                         }
-
                                     } else {
-                                        echo '<br><span style="color:red;font-weight:bold;">No se encontró el bucket (verifique el nombre).</span>';
-                                        error_log("El bucket $bucket no existe o no es accesible.");
+                                        echo '<br><span style="color:red;font-weight:bold;">El bucket no existe o no tienes permisos suficientes.</span>';
                                     }
                                 } catch (Exception $e) {
                                     echo '<br><span style="color:red;font-weight:bold;">Error de autenticación: ' . esc_html($e->getMessage()) . ' ❌</span>';
-                                    error_log("EXCEPCION AUTENTICACION GCS: " . $e->getMessage());
                                 }
+
                             } else {
                                 if (!$key_path) error_log("No se encontró opción cc_certificados_gcs_key_path");
                                 if ($key_path && !file_exists($key_path)) error_log("El key_path no existe en el filesystem: $key_path");

@@ -76,26 +76,37 @@ add_action('save_post', 'cc_guardar_metabox_productos');
 
 // META BOX - EMPRESAS
 
-// Registrar el metabox para contenido de email en 'empresa'
+// Registrar el metabox para contenido de email en 'empresa' y 'empresa_campus'
 function cc_agregar_metabox_email_empresa() {
     add_meta_box(
         'empresa_email_contenido',              // ID del metabox
-        'Contenido del Correo Electrónico',     // Título del metabox
+        'Contenido y Asunto del Correo Electrónico', // Título del metabox
         'cc_metabox_email_contenido_empresa',   // Callback de renderizado
-        array('empresa_campus', 'empresa'),                              // Tipo de post
+        array('empresa', 'empresa_campus'),     // Tipo de post
         'normal',                               // Contexto
         'high'                                  // Prioridad
     );
 }
 add_action('add_meta_boxes', 'cc_agregar_metabox_email_empresa');
 
-// Renderizar el campo usando wp_editor y un nonce de seguridad
+// Renderizar los campos usando wp_editor y un nonce de seguridad
 function cc_metabox_email_contenido_empresa($post) {
     // Nonce para seguridad
     wp_nonce_field('cc_email_empresa_nonce_action', 'cc_email_empresa_nonce');
-    // Obtener el valor actual
-    $contenido_email = get_post_meta($post->ID, '_contenido_email', true);
 
+    // Obtener los valores actuales
+    $contenido_email = get_post_meta($post->ID, '_contenido_email', true);
+    $email_subject = get_post_meta($post->ID, '_email_subject', true);
+
+    // Campo de asunto del email
+    ?>
+    <p>
+        <label for="email_subject"><strong>Asunto del Email:</strong></label><br>
+        <input type="text" id="email_subject" name="email_subject" value="<?php echo esc_attr($email_subject); ?>" class="regular-text" style="width: 100%;" />
+    </p>
+    <?php
+
+    // Campo de contenido de email
     wp_editor($contenido_email, 'contenido_email', array(
         'textarea_name' => 'contenido_email',
         'editor_height' => 200,
@@ -104,7 +115,7 @@ function cc_metabox_email_contenido_empresa($post) {
     ));
 }
 
-// Guardar el valor del contenido del correo electrónico al guardar la entrada
+// Guardar el asunto y el contenido del correo electrónico al guardar la entrada
 function cc_guardar_metabox_email_contenido_empresa($post_id) {
     // Validar autosave
     if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) return;
@@ -116,13 +127,20 @@ function cc_guardar_metabox_email_contenido_empresa($post_id) {
     $post_type = get_post_type($post_id);
     if ($post_type !== 'empresa' && $post_type !== 'empresa_campus') return;
 
+    // Guardar asunto
+    if (isset($_POST['email_subject'])) {
+        $email_subject = sanitize_text_field($_POST['email_subject']);
+        update_post_meta($post_id, '_email_subject', $email_subject);
+    }
+
+    // Guardar contenido email
     if (isset($_POST['contenido_email'])) {
-        // Usa wp_kses_post para permitir HTML seguro de editor visual
         $contenido_email = wp_kses_post($_POST['contenido_email']);
         update_post_meta($post_id, '_contenido_email', $contenido_email);
     }
 }
 add_action('save_post', 'cc_guardar_metabox_email_contenido_empresa');
+
 
 
 // META BOX - CURSOS-SALUD
