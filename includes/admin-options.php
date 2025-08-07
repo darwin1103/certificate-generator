@@ -43,6 +43,12 @@ add_action('admin_init', function() {
     register_setting('cc_certificados_settings_group', 'cc_certificados_gcs_bucket');
     register_setting('cc_certificados_settings_group', 'cc_certificados_gcs_key_path');
 });
+// Añade la opción de woo en la página de settings
+add_action('admin_init', function() {
+    if (class_exists('WooCommerce')) {
+        register_setting('cc_certificados_settings_group', 'cc_certificados_woo_enabled');
+    }
+});
 
 // 3. Procesar el archivo JSON al guardar la página de settings
 add_action('admin_init', function() {
@@ -128,6 +134,17 @@ function cc_certificados_settings_page_cb() {
                         <input type="text" name="cc_certificados_nit_empresa" value="<?php echo esc_attr($nit_empresa); ?>" class="regular-text" />
                     </td>
                 </tr>
+                                <?php if (class_exists('WooCommerce')) : ?>
+                <tr valign="top">
+                    <th scope="row">Integración con WooCommerce</th>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="cc_certificados_woo_enabled" value="1" <?php checked(1, get_option('cc_certificados_woo_enabled', 0)); ?> />
+                            Activar generación de certificados desde WooCommerce
+                        </label>
+                    </td>
+                </tr>
+                <?php endif; ?>
                 <tr valign="top">
                     <th scope="row">Almacenar certificados en Google Cloud Storage (GCS)</th>
                     <td>
