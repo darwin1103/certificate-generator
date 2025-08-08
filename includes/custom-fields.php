@@ -145,20 +145,26 @@ add_action('save_post', 'cc_guardar_metabox_email_contenido_empresa');
 
 // META BOX - CURSOS-SALUD
 
-// Registrar el metabox para cursos-salud
+// Registrar el metabox para cursos-salud y productos si la integración Woo está habilitada
 function registrar_metabox_cursos_salud() {
+    $pantallas = array( 'cursos-salud' );
+
+    // Solo añadir 'product' si la integración Woo está activada en opciones
+    if ( get_option( 'cc_certificados_woo_enabled' ) ) {
+        $pantallas[] = 'product';
+    }
+
     add_meta_box(
         'metabox_cursos_salud',
         'Configuración del Curso',
         'renderizar_metabox_cursos_salud',
-        'cursos-salud',
+        $pantallas,
         'side',
         'high'
     );
 }
 add_action('add_meta_boxes', 'registrar_metabox_cursos_salud');
 
-// Renderizar el metabox de configuración del curso
 function renderizar_metabox_cursos_salud($post) {
     // Opciones predefinidas
     $opciones = [
@@ -187,8 +193,6 @@ function renderizar_metabox_cursos_salud($post) {
 
     // Valores actuales o valores por defecto
     $categoria = get_post_meta($post->ID, '_categoria_certificado', true) ?: 'basico';
-
-    // Si es nuevo, usar valores por defecto de la categoría seleccionada
     $sel = $opciones[$categoria];
 
     $tipo = get_post_meta($post->ID, '_tipo_certificado', true) ?: $sel['tipo_certificado'];
@@ -243,10 +247,7 @@ function renderizar_metabox_cursos_salud($post) {
     <?php
 }
 
-
-// Guardar los metadatos del curso
 function guardar_metadatos_cursos_salud($post_id) {
-    // Seguridad y permisos
     if (!isset($_POST['metabox_nonce']) || !wp_verify_nonce($_POST['metabox_nonce'], 'guardar_metadatos_cursos_salud_nonce')) return;
     if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) return;
     if (!current_user_can('edit_post', $post_id)) return;
