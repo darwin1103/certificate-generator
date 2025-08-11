@@ -30,86 +30,121 @@ function cc_agregar_subpaginas_certificados() {
 }
 add_action('admin_menu', 'cc_agregar_subpaginas_certificados');
 
+/**
+ * Filtro temporal para forzar el directorio de subida del key JSON
+ */
+function cc_cert_filter_upload_dir_keys( $dirs ) {
+    $uploads = wp_upload_dir();
+    $subdir  = '/cc_certificados_keys';
+    $dirs['path']   = $uploads['basedir'] . $subdir;
+    $dirs['url']    = $uploads['baseurl'] . $subdir;
+    $dirs['subdir'] = $subdir;
+
+    if ( ! file_exists( $dirs['path'] ) ) {
+        wp_mkdir_p( $dirs['path'] );
+    }
+    return $dirs;
+}
+
+/**
+ * Saneador/almacenador del JSON de GCS (se ejecuta al guardar opciones)
+ * - Usa wp_handle_upload()
+ * - Elimina el anterior si lo reemplazas
+ * - Devuelve la ruta final para persistir en el option
+ */
+function cc_sanitize_and_store_gcs_key( $current_value ) {
+    error_log('[GCS] sanitize callback inicio');
+
+    if ( empty( $_FILES['cc_certificados_gcs_key'] ) || ! is_array( $_FILES['cc_certificados_gcs_key'] ) ) {
+        error_log('[GCS] No hay $_FILES para el key. Mantener valor previo.');
+        // Mantener el valor ya guardado
+        return get_option('cc_certificados_gcs_key_path');
+    }
+
+    $f = $_FILES['cc_certificados_gcs_key'];
+
+    if ( isset($f['error']) && (int) $f['error'] === UPLOAD_ERR_NO_FILE ) {
+        error_log('[GCS] No se subió archivo nuevo. Mantener valor previo.');
+        return get_option('cc_certificados_gcs_key_path');
+    }
+
+    if ( ! isset($f['error']) || (int) $f['error'] !== UPLOAD_ERR_OK ) {
+        error_log('[GCS][ERROR] Código de error de subida: ' . ( isset($f['error']) ? $f['error'] : 'desconocido' ));
+        return get_option('cc_certificados_gcs_key_path');
+    }
+
+    $ext = strtolower( pathinfo( $f['name'], PATHINFO_EXTENSION ) );
+    if ( $ext !== 'json' ) {
+        error_log('[GCS][ERROR] El archivo no es .json, extensión: ' . $ext);
+        return get_option('cc_certificados_gcs_key_path');
+    }
+
+    // Forzar directorio propio
+    add_filter('upload_dir', 'cc_cert_filter_upload_dir_keys');
+    $overrides = [
+        'test_form' => false,
+        'mimes'     => [ 'json' => 'application/json' ],
+        // 'unique_filename_callback' opcional si quieres control total del nombre
+    ];
+    $result = wp_handle_upload( $f, $overrides );
+    remove_filter('upload_dir', 'cc_cert_filter_upload_dir_keys');
+
+    if ( isset($result['error']) ) {
+        error_log('[GCS][ERROR] wp_handle_upload: ' . $result['error']);
+        return get_option('cc_certificados_gcs_key_path');
+    }
+
+    $new_path = isset($result['file']) ? $result['file'] : '';
+    if ( ! $new_path || ! file_exists($new_path) ) {
+        error_log('[GCS][ERROR] Ruta final vacía o no existe en disco.');
+        return get_option('cc_certificados_gcs_key_path');
+    }
+
+    // Eliminar anterior si existe
+    $prev = get_option('cc_certificados_gcs_key_path');
+    if ( $prev && $prev !== $new_path && file_exists($prev) ) {
+        if ( @unlink($prev) ) {
+            error_log('[GCS] Archivo anterior eliminado: ' . $prev);
+        } else {
+            error_log('[GCS][WARN] No se pudo eliminar el archivo anterior: ' . $prev);
+        }
+    }
+
+    error_log('[GCS] Key guardada en: ' . $new_path);
+    return $new_path;
+}
+
 // Registrar opciones
 add_action('admin_init', function () {
-    register_setting('cc_certificados_settings_group', 'cc_certificados_nombre_empresa');
-    register_setting('cc_certificados_settings_group', 'cc_certificados_nit_empresa');
-    register_setting('cc_certificados_settings_group', 'cc_certificados_gcs_enabled');
-    register_setting('cc_certificados_settings_group', 'cc_certificados_gcs_bucket');
-    register_setting('cc_certificados_settings_group', 'cc_certificados_gcs_key_path');
+    // Texto simple
+    register_setting('cc_certificados_settings_group', 'cc_certificados_nombre_empresa', [
+        'sanitize_callback' => 'sanitize_text_field',
+    ]);
+    register_setting('cc_certificados_settings_group', 'cc_certificados_nit_empresa', [
+        'sanitize_callback' => 'sanitize_text_field',
+    ]);
 
-    if (class_exists('WooCommerce')) {
-        register_setting('cc_certificados_settings_group', 'cc_certificados_woo_enabled');
+    // Checkboxes -> 0/1
+    register_setting('cc_certificados_settings_group', 'cc_certificados_gcs_enabled', [
+        'sanitize_callback' => function( $v ) { return ! empty($v) ? '1' : '0'; },
+    ]);
+
+    if ( class_exists('WooCommerce') ) {
+        register_setting('cc_certificados_settings_group', 'cc_certificados_woo_enabled', [
+            'sanitize_callback' => function( $v ) { return ! empty($v) ? '1' : '0'; },
+        ]);
     }
+
+    // Bucket
+    register_setting('cc_certificados_settings_group', 'cc_certificados_gcs_bucket', [
+        'sanitize_callback' => 'sanitize_text_field',
+    ]);
+
+    // Ruta del JSON (se procesa vía sanitize_callback con wp_handle_upload)
+    register_setting('cc_certificados_settings_group', 'cc_certificados_gcs_key_path', [
+        'sanitize_callback' => 'cc_sanitize_and_store_gcs_key',
+    ]);
 });
-
-// Procesar el archivo JSON al guardar
-add_action('admin_init', function () {
-    error_log('[GCS] Iniciando hook admin_init para procesar archivo JSON...');
-
-    if (
-        isset($_POST['option_page']) &&
-        $_POST['option_page'] === 'cc_certificados_settings_group' &&
-        check_admin_referer('cc_certificados_settings_group-options')
-    ) {
-        error_log('[GCS] Formulario de settings detectado, procesando...');
-        error_log('[GCS] _FILES: ' . print_r($_FILES, true));
-
-        // Solo procesar si realmente hay un archivo subido
-        if (!empty($_FILES['cc_certificados_gcs_key']['tmp_name'])) {
-            $uploaded_file = $_FILES['cc_certificados_gcs_key'];
-            $ext = pathinfo($uploaded_file['name'], PATHINFO_EXTENSION);
-
-            error_log('[GCS] Archivo detectado: ' . $uploaded_file['name']);
-            error_log('[GCS] Extensión detectada: ' . $ext);
-
-            if (strtolower($ext) === 'json') {
-                $upload_dir = wp_upload_dir();
-                $safe_dir = $upload_dir['basedir'] . '/cc_certificados_keys/';
-                error_log('[GCS] Directorio destino: ' . $safe_dir);
-
-                if (!file_exists($safe_dir)) {
-                    if (wp_mkdir_p($safe_dir)) {
-                        error_log('[GCS] Directorio creado con éxito.');
-                    } else {
-                        error_log('[GCS][ERROR] No se pudo crear el directorio.');
-                    }
-                }
-
-                // Borrar el anterior solo si vamos a reemplazarlo
-                $prev = get_option('cc_certificados_gcs_key_path');
-                error_log('[GCS] Archivo anterior registrado en opciones: ' . $prev);
-
-                if ($prev && file_exists($prev)) {
-                    if (@unlink($prev)) {
-                        error_log('[GCS] Archivo anterior eliminado correctamente.');
-                    } else {
-                        error_log('[GCS][ERROR] No se pudo eliminar el archivo anterior.');
-                    }
-                } else {
-                    error_log('[GCS] No había archivo anterior o no existe en disco.');
-                }
-
-                $target = $safe_dir . 'service-account-' . time() . '.json';
-                error_log('[GCS] Ruta final donde se guardará: ' . $target);
-
-                if (move_uploaded_file($uploaded_file['tmp_name'], $target)) {
-                    update_option('cc_certificados_gcs_key_path', $target);
-                    error_log('[GCS] Archivo movido y opción actualizada con éxito.');
-                } else {
-                    error_log('[GCS][ERROR] Falló move_uploaded_file desde ' . $uploaded_file['tmp_name']);
-                }
-            } else {
-                error_log('[GCS][ERROR] El archivo no es .json, extensión: ' . $ext);
-            }
-        } else {
-            error_log('[GCS] No se subió un archivo nuevo, manteniendo el existente.');
-        }
-    } else {
-        error_log('[GCS] No es el formulario de ajustes de certificados o nonce inválido.');
-    }
-});
-
 
 // Renderizar settings page
 function cc_certificados_settings_page_cb() {
@@ -134,10 +169,13 @@ function cc_certificados_settings_page_cb() {
                     <th scope="row">NIT de la empresa</th>
                     <td><input type="text" name="cc_certificados_nit_empresa" value="<?php echo esc_attr($nit_empresa); ?>" class="regular-text" /></td>
                 </tr>
+
                 <?php if (class_exists('WooCommerce')) : ?>
                 <tr valign="top">
                     <th scope="row">Integración con WooCommerce</th>
                     <td>
+                        <!-- hidden para asegurar 0 cuando no está checked -->
+                        <input type="hidden" name="cc_certificados_woo_enabled" value="0" />
                         <label>
                             <input type="checkbox" name="cc_certificados_woo_enabled" value="1" <?php checked(1, get_option('cc_certificados_woo_enabled', 0)); ?> />
                             Activar generación de certificados desde WooCommerce
@@ -145,9 +183,12 @@ function cc_certificados_settings_page_cb() {
                     </td>
                 </tr>
                 <?php endif; ?>
+
                 <tr valign="top">
                     <th scope="row">Almacenar en Google Cloud Storage (GCS)</th>
                     <td>
+                        <!-- hidden para asegurar 0 cuando no está checked -->
+                        <input type="hidden" name="cc_certificados_gcs_enabled" value="0" />
                         <label>
                             <input type="checkbox" id="cc_certificados_gcs_enabled" name="cc_certificados_gcs_enabled" value="1" <?php checked(1, $gcs_enabled); ?> />
                             Activar almacenamiento en GCS
@@ -169,27 +210,41 @@ function cc_certificados_settings_page_cb() {
                             <?php if ($key_path): ?>
                                 <br><small>Subido: <code><?php echo esc_html(basename($key_path)); ?></code></small>
                             <?php endif; ?>
+
                             <?php
                             // Verificación
                             if ($key_path && file_exists($key_path) && $bucket) {
-                                try {
-                                    require_once __DIR__ . '/../vendor/autoload.php';
-                                    $storage = new Google\Cloud\Storage\StorageClient(['keyFilePath' => $key_path]);
-                                    $bucket_obj = $storage->bucket($bucket);
-                                    if ($bucket_obj && $bucket_obj->exists()) {
-                                        echo '<br><span style="color:green;font-weight:bold;">Autenticado con GCS ✅</span>';
-                                        try {
-                                            $object = $bucket_obj->upload('test-content', ['name' => 'test-file.txt']);
-                                            echo '<br><span style="color:green;">Test de subida exitoso</span>';
-                                            $object->delete();
-                                        } catch (Exception $e) {
-                                            echo '<br><span style="color:red;">Error al subir test: ' . esc_html($e->getMessage()) . '</span>';
+                                $autoload = dirname(__DIR__) . '/vendor/autoload.php'; // desde /includes hacia raíz del plugin
+                                // Intentar cargar autoload solo si no está cargado
+                                if ( ! class_exists('\\Google\\Cloud\\Storage\\StorageClient') && file_exists($autoload) ) {
+                                    require_once $autoload;
+                                }
+
+                                if ( class_exists('\\Google\\Cloud\\Storage\\StorageClient') ) {
+                                    try {
+                                        $storage    = new \Google\Cloud\Storage\StorageClient(['keyFilePath' => $key_path]);
+                                        $bucket_obj = $storage->bucket($bucket);
+
+                                        if ($bucket_obj && $bucket_obj->exists()) {
+                                            echo '<br><span style="color:green;font-weight:bold;">Autenticado con GCS ✅</span>';
+                                            // Test de subida opcional:
+                                            try {
+                                                $testName = 'cc-cert-test-' . time() . '.txt';
+                                                $object   = $bucket_obj->upload('test-content', ['name' => $testName]);
+                                                echo '<br><span style="color:green;">Test de subida exitoso (' . esc_html($testName) . ')</span>';
+                                                // Limpieza
+                                                if ($object) { $object->delete(); }
+                                            } catch (\Throwable $e) {
+                                                echo '<br><span style="color:#d63638;">Error al subir test: ' . esc_html($e->getMessage()) . '</span>';
+                                            }
+                                        } else {
+                                            echo '<br><span style="color:#d63638;font-weight:bold;">El bucket no existe o no hay permisos.</span>';
                                         }
-                                    } else {
-                                        echo '<br><span style="color:red;font-weight:bold;">El bucket no existe o no hay permisos.</span>';
+                                    } catch (\Throwable $e) {
+                                        echo '<br><span style="color:#d63638;font-weight:bold;">Error de autenticación: ' . esc_html($e->getMessage()) . '</span>';
                                     }
-                                } catch (Exception $e) {
-                                    echo '<br><span style="color:red;font-weight:bold;">Error de autenticación: ' . esc_html($e->getMessage()) . '</span>';
+                                } else {
+                                    echo '<br><span style="color:#d63638;">Librería de Google Cloud no disponible. Instala dependencias con Composer.</span>';
                                 }
                             }
                             ?>
@@ -200,11 +255,13 @@ function cc_certificados_settings_page_cb() {
 
             <script>
             document.addEventListener('DOMContentLoaded', function() {
-                const gcsCheck = document.getElementById('cc_certificados_gcs_enabled');
+                const gcsCheck   = document.getElementById('cc_certificados_gcs_enabled');
                 const gcsOptions = document.getElementById('gcs_extra_options');
-                gcsCheck.addEventListener('change', function() {
-                    gcsOptions.style.display = this.checked ? '' : 'none';
-                });
+                if (gcsCheck && gcsOptions) {
+                    gcsCheck.addEventListener('change', function() {
+                        gcsOptions.style.display = this.checked ? '' : 'none';
+                    });
+                }
             });
             </script>
 
@@ -213,4 +270,3 @@ function cc_certificados_settings_page_cb() {
     </div>
     <?php
 }
-
