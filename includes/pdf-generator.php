@@ -39,6 +39,12 @@ function cc_capturar_datos_certificado($post_data, $contexto = 'campus') {
 
 // 2. Renderiza el HTML del certificado
 function cc_generar_html_certificado($datos_curso, $datos_persona, $empresa_info, $imagen_fondo) {
+    
+    // Fuente DOMPDF: calcula aquí para que exista en el scope
+    $font_path = plugin_dir_path(__FILE__) . 'assets/fonts/constan.ttf';
+    $font_path = str_replace('\\', '/', $font_path);
+    $font_path_uri = 'file://' . $font_path;
+    
     extract($datos_persona);
     extract($datos_curso);
     extract($empresa_info);
