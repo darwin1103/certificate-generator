@@ -2,8 +2,8 @@
 
 /**
  * Plugin Name: Cursos Certificados
- * Description: Añade un catalogo de cursos y genera certificados para tus estudiantes.
- * Version: 1.3.0
+ * Description: Añade un catalogo de cursos y genera certificados para tus estudiantes. Incluye integración con Google cloud service y woocommerce.
+ * Version: 2.0.0
  * Author: Darwin Avendaño
  */
 // Evitar el acceso directo al archivo
