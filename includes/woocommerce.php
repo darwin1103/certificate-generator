@@ -214,16 +214,19 @@ function cc_woo_cert_generate_for_order( WC_Order $order, $empresa_id ) {
         $should = apply_filters('cc_cert_should_generate_for_product', true, $product_id, $order);
         if ( ! $should ) { continue; }
 
-        // Datos del "curso" desde el producto (ajusta claves si tus metabox difieren)
-        $int_num               = get_post_meta( $product_id, '_intensidad_horaria', true );
-        $intensidad_horaria    = $int_num ? ( $int_num . ' horas' ) : '';
-        $vigencia_certificado  = get_post_meta( $product_id, 'fecha_expiracion_certificado', true );
-        $curso_tipo            = $empresa_titulo; // como en generator-campus.php
+        // === CURSO: toma 'curso_tipo' del post meta _tipo_certificado del PRODUCTO ===
+        $curso_tipo_meta = get_post_meta( $product_id, '_tipo_certificado', true );
+        $curso_tipo = $curso_tipo_meta !== '' ? sanitize_text_field( $curso_tipo_meta ) : $empresa_titulo;
+
+        // Resto de metadatos del curso
+        $int_num              = get_post_meta( $product_id, '_intensidad_horaria', true );
+        $intensidad_horaria   = $int_num ? ( $int_num . ' horas' ) : '';
+        $vigencia_certificado = get_post_meta( $product_id, 'fecha_expiracion_certificado', true );
 
         $curso = [
             'curso_id'             => $product_id,
             'curso_nombre'         => $product->get_name(),
-            'curso_tipo'           => $curso_tipo,
+            'curso_tipo'           => $curso_tipo,            // <- ahora viene de _tipo_certificado
             'intensidad_horaria'   => $intensidad_horaria,
             'vigencia_certificado' => $vigencia_certificado,
         ];

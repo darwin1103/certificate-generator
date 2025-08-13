@@ -229,6 +229,7 @@ function cc_crear_post_certificado($datos_persona, $datos_curso, $pdf_url, $empr
         'post_content' => 'Certificado generado automáticamente.',
         'post_status'  => 'publish',
     ]);
+
     if ($certificado_id) {
         update_post_meta($certificado_id, 'nombre_certificado', $datos_persona['nombre']);
         update_post_meta($certificado_id, 'cedula_certificado', $datos_persona['documento']);
@@ -237,11 +238,48 @@ function cc_crear_post_certificado($datos_persona, $datos_curso, $pdf_url, $empr
         update_post_meta($certificado_id, 'empresa_certificado', $empresa_info['empresa_titulo']);
         update_post_meta($certificado_id, 'horas', $datos_curso['intensidad_horaria']);
         update_post_meta($certificado_id, 'pdf_file', $pdf_url);
-        update_post_meta($certificado_id, 'fecha_expedicion', $datos_persona['fecha_expedicion']);
-        update_post_meta($certificado_id, 'fecha_expiracion_certificado', $datos_curso['vigencia_certificado']);
+        update_post_meta($certificado_id, 'fecha_expedicion', $datos_persona['fecha_expedicion']); // dd/mm/yyyy (Woo)
+        update_post_meta($certificado_id, 'fecha_expiracion_certificado', $datos_curso['vigencia_certificado']); // p.ej. "1 año"
+
+        // === Nuevo: calcular y persistir fecha_vencimiento en formato Y-m-d ===
+        $vigencia_raw    = isset($datos_curso['vigencia_certificado']) ? (string) $datos_curso['vigencia_certificado'] : '';
+        $expedicion_raw  = isset($datos_persona['fecha_expedicion']) ? (string) $datos_persona['fecha_expedicion'] : '';
+        $anio_vigencia   = (int) preg_replace('/\D+/', '', $vigencia_raw); // "1 año" -> 1
+        $fecha_vencimiento = '';
+
+        if ($anio_vigencia > 0 && $expedicion_raw !== '') {
+            $dt = false;
+            if (strpos($expedicion_raw, '/') !== false) {
+                // Woo: dd/mm/yyyy
+                $dt = DateTime::createFromFormat('d/m/Y', $expedicion_raw);
+            } elseif (strpos($expedicion_raw, '-') !== false) {
+                // Otras fuentes: Y-m-d
+                $dt = DateTime::createFromFormat('Y-m-d', $expedicion_raw);
+            }
+
+            if ($dt instanceof DateTime) {
+                $dt->setTime(0, 0, 0);
+                $dt->add(new DateInterval('P' . $anio_vigencia . 'Y'));
+                $fecha_vencimiento = $dt->format('Y-m-d');
+            } else {
+                error_log('CC_CERT: No se pudo parsear fecha_expedicion en cc_crear_post_certificado: ' . $expedicion_raw);
+            }
+        } else {
+            error_log('CC_CERT: Vigencia sin años o fecha_expedicion vacía al crear certificado. vigencia=' . $vigencia_raw . ' expedicion=' . $expedicion_raw);
+        }
+
+        update_post_meta($certificado_id, 'fecha_vencimiento', $fecha_vencimiento);
+        error_log('CC_CERT: Certificado creado ' . wp_json_encode([
+            'id' => $certificado_id,
+            'fecha_expedicion' => $expedicion_raw,
+            'vigencia' => $vigencia_raw,
+            'fecha_vencimiento' => $fecha_vencimiento
+        ]));
     }
+
     return $certificado_id;
 }
+
 
 // 5. Envía el correo con los certificados
 /**

@@ -312,10 +312,9 @@ add_action('add_meta_boxes', 'cc_agregar_campos_personalizados_certificados');
 
 // Renderizar el metabox de campos personalizados
 function cc_renderizar_metabox_campos_personalizados($post) {
-    // Nonce para seguridad
     wp_nonce_field('cc_certificado_campos_nonce_action', 'cc_certificado_campos_nonce');
 
-    // Obtener los valores actuales
+    // Metas base
     $nombre  = get_post_meta($post->ID, 'nombre_certificado', true);
     $cedula  = get_post_meta($post->ID, 'cedula_certificado', true);
     $curso   = get_post_meta($post->ID, 'curso_certificado', true);
@@ -323,19 +322,33 @@ function cc_renderizar_metabox_campos_personalizados($post) {
     $pdf_url = get_post_meta($post->ID, 'pdf_file', true);
     $horas   = get_post_meta($post->ID, 'horas', true);
 
-    $fecha_expedicion      = get_post_meta($post->ID, 'fecha_expedicion', true);
-    $vigencia_certificado  = get_post_meta($post->ID, 'fecha_expiracion_certificado', true);
+    $fecha_expedicion      = get_post_meta($post->ID, 'fecha_expedicion', true);              // dd/mm/yyyy o Y-m-d
+    $vigencia_certificado  = get_post_meta($post->ID, 'fecha_expiracion_certificado', true);  // p.ej. "1 año"
+    $fecha_vencimiento     = get_post_meta($post->ID, 'fecha_vencimiento', true);             // Y-m-d (si lo guardamos)
 
-    // Calcular fecha actual y fecha de vencimiento
-    $fecha_actual = date('Y-m-d');
-    // Extrae el número de años (por ejemplo, '1 año', '2 años' -> 1, 2)
-    $solo_numeros = intval(preg_replace('/\D/', '', $vigencia_certificado));
-    $fecha_vencimiento = '';
-    if ($fecha_expedicion && $solo_numeros) {
-        $fecha_vencimiento = date('Y-m-d', strtotime("+{$solo_numeros} years", strtotime($fecha_expedicion)));
+    // Fallback robusto si no estaba guardado
+    if ($fecha_vencimiento === '' && $fecha_expedicion && $vigencia_certificado) {
+        $anios = (int) preg_replace('/\D+/', '', $vigencia_certificado);
+        if ($anios > 0) {
+            $dt = false;
+            if (strpos($fecha_expedicion, '/') !== false) {
+                $dt = DateTime::createFromFormat('d/m/Y', $fecha_expedicion);
+            } elseif (strpos($fecha_expedicion, '-') !== false) {
+                $dt = DateTime::createFromFormat('Y-m-d', $fecha_expedicion);
+            }
+            if ($dt instanceof DateTime) {
+                $dt->setTime(0,0,0);
+                $dt->add(new DateInterval('P' . $anios . 'Y'));
+                $fecha_vencimiento = $dt->format('Y-m-d');
+            } else {
+                error_log('CC_CERT: No se pudo parsear fecha_expedicion en metabox: ' . $fecha_expedicion);
+            }
+        }
     }
-    $estatus_vencimiento = ($fecha_vencimiento && strtotime($fecha_vencimiento) < strtotime($fecha_actual)) ? 'EXPIRADO' : 'Vigente';
 
+    // Estado
+    $fecha_actual = date('Y-m-d');
+    $estatus_vencimiento = ($fecha_vencimiento && strtotime($fecha_vencimiento) < strtotime($fecha_actual)) ? 'EXPIRADO' : 'Vigente';
     ?>
     <p><label for="nombre_certificado">Nombre:</label><br>
     <input type="text" id="nombre_certificado" value="<?php echo esc_attr($nombre); ?>" readonly></p>
