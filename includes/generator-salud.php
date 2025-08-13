@@ -89,13 +89,13 @@ function cc_formulario_salud() {
         </div>
         <!-- Tipo de Documento -->
         <div class="mb-3">
-            <label>Tipo de Documento:</label><br>
-            <input type="radio" id="doc-cc" name="tipo_documento" value="Cédula de Ciudadanía" checked>
-            <label for="doc-cc">Cédula de Ciudadanía</label>
-            <input type="radio" id="doc-ppt" name="tipo_documento" value="PPT">
-            <label for="doc-ppt">PPT</label>
-            <input type="radio" id="doc-ti" name="tipo_documento" value="Tarjeta de Identidad">
-            <label for="doc-ti">Tarjeta de Identidad</label>
+        <label for="tipo_documento">Tipo de Documento:</label><br>
+        <select id="tipo_documento" name="tipo_documento" required>
+            <option value="Cédula de Ciudadanía" selected>Cédula de Ciudadanía</option>
+            <option value="Cédula de Extranjería">Cédula de Extranjería</option>
+            <option value="Tarjeta de Identidad">Tarjeta de Identidad</option>
+            <option value="PPT">PPT</option>
+        </select>
         </div>
         <!-- Selección de cursos -->
         <div class="mb-3">
