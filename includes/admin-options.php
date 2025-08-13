@@ -48,20 +48,27 @@ add_action('admin_enqueue_scripts', function( $hook ) {
 });
 
 /**
- * Filtro temporal para forzar el directorio de subida del key JSON
+ * Filtro para forzar el directorio de subida del key JSON (sin recursión).
  */
 function cc_cert_filter_upload_dir_keys( $dirs ) {
-    $uploads = wp_upload_dir();
-    $subdir  = '/cc_certificados_keys';
-    $dirs['path']   = $uploads['basedir'] . $subdir;
-    $dirs['url']    = $uploads['baseurl'] . $subdir;
-    $dirs['subdir'] = $subdir;
+    // $dirs ya trae: basedir, baseurl, path, url, subdir, error
+    $subfolder = 'cc_certificados_keys';
 
-    if ( ! file_exists( $dirs['path'] ) ) {
-        wp_mkdir_p( $dirs['path'] );
+    // Construye path/url a partir de basedir/baseurl del mismo $dirs (no uses wp_upload_dir() aquí)
+    $dirs['path']   = trailingslashit( $dirs['basedir'] ) . $subfolder;
+    $dirs['url']    = trailingslashit( $dirs['baseurl'] ) . $subfolder;
+    $dirs['subdir'] = '/' . $subfolder;
+
+    if ( ! is_dir( $dirs['path'] ) ) {
+        // Crea el directorio si no existe
+        if ( ! wp_mkdir_p( $dirs['path'] ) ) {
+            error_log('[GCS][ERROR] No se pudo crear el directorio: ' . $dirs['path']);
+        }
     }
+
     return $dirs;
 }
+
 
 /**
  * Saneador/almacenador del JSON de GCS (se ejecuta al guardar opciones)
