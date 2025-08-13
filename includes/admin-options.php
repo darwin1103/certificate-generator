@@ -31,6 +31,23 @@ function cc_agregar_subpaginas_certificados() {
 add_action('admin_menu', 'cc_agregar_subpaginas_certificados');
 
 /**
+ * Encola wp-color-picker solo en la pantalla de ajustes del plugin.
+ */
+add_action('admin_enqueue_scripts', function( $hook ) {
+    // Ejemplos de $hook: 'certificado_page_cc_certificados_settings'
+    // Habilitamos por hook o por query arg como respaldo.
+    $is_settings =
+        $hook === 'certificado_page_cc_certificados_settings'
+        || ( isset($_GET['page']) && $_GET['page'] === 'cc_certificados_settings' );
+
+    if ( $is_settings ) {
+        wp_enqueue_style('wp-color-picker');
+        wp_enqueue_script('wp-color-picker');
+        error_log('CC_CERT: Enqueued wp-color-picker on settings page. Hook='.$hook);
+    }
+});
+
+/**
  * Filtro temporal para forzar el directorio de subida del key JSON
  */
 function cc_cert_filter_upload_dir_keys( $dirs ) {
@@ -112,6 +129,20 @@ function cc_sanitize_and_store_gcs_key( $current_value ) {
     return $new_path;
 }
 
+/**
+ * Sanear color hex. Acepta #RRGGBB o #RGB. Si no es válido, conserva el valor previo.
+ */
+function cc_sanitize_hex_color_option( $value ) {
+    $value = is_string($value) ? trim($value) : '';
+    $san   = sanitize_hex_color( $value ); // devuelve '#xxxxxx' o null
+    if ( $san === null ) {
+        $prev = get_option('cc_certificados_color_empresa', '');
+        error_log('CC_CERT[WARN]: Color inválido recibido: '.$value.' | Se conserva: '.$prev);
+        return $prev;
+    }
+    return $san;
+}
+
 // Registrar opciones
 add_action('admin_init', function () {
     // Texto simple
@@ -133,7 +164,7 @@ add_action('admin_init', function () {
             'sanitize_callback' => function( $v ) { return ! empty($v) ? '1' : '0'; },
         ]);
 
-        // NUEVO: select que guarda el ID de un post del CPT "empresa"
+        // Select que guarda el ID de un post del CPT "empresa_campus"
         register_setting('cc_certificados_settings_group', 'cc_certificados_woo_tipo_cert_empresa_id', [
             'sanitize_callback' => 'absint',
         ]);
@@ -148,6 +179,12 @@ add_action('admin_init', function () {
     register_setting('cc_certificados_settings_group', 'cc_certificados_gcs_key_path', [
         'sanitize_callback' => 'cc_sanitize_and_store_gcs_key',
     ]);
+
+    // === NUEVO: Color empresa (hex) ===
+    register_setting('cc_certificados_settings_group', 'cc_certificados_color_empresa', [
+        'sanitize_callback' => 'cc_sanitize_hex_color_option',
+        'default'           => '#000000',
+    ]);
 });
 
 // Renderizar settings page
@@ -161,6 +198,7 @@ function cc_certificados_settings_page_cb() {
     $woo_enabled    = class_exists('WooCommerce') ? get_option('cc_certificados_woo_enabled', 0) : 0;
     $woo_tipo_id    = class_exists('WooCommerce') ? absint( get_option('cc_certificados_woo_tipo_cert_empresa_id', 0) ) : 0;
 
+    $color_empresa  = get_option('cc_certificados_color_empresa', '#000000');
     ?>
     <div class="wrap">
         <h1>Ajustes de Certificados</h1>
@@ -178,6 +216,22 @@ function cc_certificados_settings_page_cb() {
                     <td><input type="text" name="cc_certificados_nit_empresa" value="<?php echo esc_attr($nit_empresa); ?>" class="regular-text" /></td>
                 </tr>
 
+                <!-- NUEVO: Color empresa -->
+                <tr valign="top">
+                    <th scope="row">Color empresa</th>
+                    <td>
+                        <input
+                            type="text"
+                            name="cc_certificados_color_empresa"
+                            id="cc_certificados_color_empresa"
+                            value="<?php echo esc_attr( $color_empresa ); ?>"
+                            class="cc-color-field"
+                            data-default-color="#000000"
+                            />
+                        <p class="description">Selecciona el color corporativo (hex). Se guardará como #RRGGBB.</p>
+                    </td>
+                </tr>
+
                 <?php if (class_exists('WooCommerce')) : ?>
                 <tr valign="top">
                     <th scope="row">Integración con WooCommerce</th>
@@ -191,16 +245,16 @@ function cc_certificados_settings_page_cb() {
                     </td>
                 </tr>
 
-                <!-- NUEVO: Tipo de certificado - woo (select de CPT empresa) -->
+                <!-- Tipo de certificado - woo (select de CPT empresa_campus) -->
                 <tr id="woo_tipo_cert_row" valign="top" style="<?php echo $woo_enabled ? '' : 'display:none;'; ?>">
                     <th scope="row">Tipo de certificado - woo</th>
                     <td>
                         <select name="cc_certificados_woo_tipo_cert_empresa_id" class="regular-text">
                             <option value="0">— Selecciona —</option>
                             <?php
-                            // Obtener posts del CPT "empresa"
+                            // Obtener posts del CPT "empresa_campus"
                             $emp_query = new WP_Query([
-                                'post_type'              => 'empresa',
+                                'post_type'              => 'empresa_campus',
                                 'post_status'            => 'publish',
                                 'posts_per_page'         => -1,
                                 'orderby'                => 'title',
@@ -301,6 +355,7 @@ function cc_certificados_settings_page_cb() {
 
             <script>
             document.addEventListener('DOMContentLoaded', function() {
+                // Toggle GCS
                 const gcsCheck   = document.getElementById('cc_certificados_gcs_enabled');
                 const gcsOptions = document.getElementById('gcs_extra_options');
                 if (gcsCheck && gcsOptions) {
@@ -309,13 +364,18 @@ function cc_certificados_settings_page_cb() {
                     });
                 }
 
-                // Toggle para opciones de WooCommerce
+                // Toggle Woo opciones
                 const wooCheck = document.getElementById('cc_certificados_woo_enabled');
                 const wooRow   = document.getElementById('woo_tipo_cert_row');
                 if (wooCheck && wooRow) {
                     wooCheck.addEventListener('change', function() {
                         wooRow.style.display = this.checked ? '' : 'none';
                     });
+                }
+
+                // Inicializar color picker
+                if (window.jQuery && jQuery.fn.wpColorPicker) {
+                    jQuery('.cc-color-field').wpColorPicker();
                 }
             });
             </script>

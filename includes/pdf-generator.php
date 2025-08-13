@@ -291,41 +291,70 @@ function cc_crear_post_certificado($datos_persona, $datos_curso, $pdf_url, $empr
  * @return bool
  */
 function cc_enviar_certificados($to, $mensaje_base, $pdf_links, $asunto = 'Certificados Generados') {
+    // === Color del botón desde options ===
+    $opt_color = get_option('cc_certificados_color_empresa', '#2e77e5');
+    $opt_color = is_string($opt_color) ? trim($opt_color) : '';
+    $btn_bg    = sanitize_hex_color($opt_color);
+    if ( ! $btn_bg ) {
+        error_log('CC_CERT: Color empresa inválido en options. Valor recibido: ' . print_r($opt_color, true) . ' | Usando fallback #2e77e5');
+        $btn_bg = '#2e77e5';
+    }
+
+    // Determinar color de texto según contraste (blanco para fondos oscuros)
+    $hex = ltrim($btn_bg, '#');
+    if (strlen($hex) === 3) {
+        $hex = $hex[0].$hex[0].$hex[1].$hex[1].$hex[2].$hex[2];
+    }
+    $r = hexdec(substr($hex, 0, 2));
+    $g = hexdec(substr($hex, 2, 2));
+    $b = hexdec(substr($hex, 4, 2));
+    // luminancia aproximada
+    $luma = (0.2126*$r + 0.7152*$g + 0.0722*$b);
+    $btn_text = ($luma < 140) ? '#ffffff' : '#111111';
+
     // Construir el bloque de botones
     $botones = '';
     foreach ($pdf_links as $i => $url) {
+        $i_num = (int) $i + 1;
         $botones .= '
-        <div style="margin:18px 0;">
-            <a href="'.esc_url($url).'" 
-                style="
+        <div style="margin-bottom:24px;">
+            <a href="'.esc_url($url).'"
+               style="
                     display:inline-block;
-                    background-color:#2e77e5;
-                    color:#fff;
+                    background-color:'.$btn_bg.';
+                    color:'.$btn_text.';
                     padding:12px 24px;
                     border-radius:6px;
                     text-decoration:none;
                     font-size:16px;
                     font-weight:bold;
-                    margin-bottom: 8px;
-                " 
-                target="_blank"
-            >Descargar Certificado '.($i+1).'</a>
+                    margin:8px 0;
+               "
+               target="_blank"
+            >Descargar Certificado '.$i_num.'</a>
         </div>';
     }
 
-    // Armar el mensaje final (puedes personalizar el saludo y el footer)
+    // Armar el mensaje final
     $mensaje = '
         <div style="font-family:sans-serif;">
-            <p>¡Hola!<br>Tu(s) certificado(s) han sido generados exitosamente.</p>
             '.wpautop($mensaje_base).'
             '.$botones.'
-            <p style="margin-top:32px;color:#888;font-size:13px;">Si tienes dudas, responde a este correo.<br>Equipo de Certificados</p>
+            <p style="margin-top:32px;color:#888;font-size:13px;">Si tienes dudas, responde a este correo.</p>
         </div>
     ';
 
-    // Preparar headers
+    // Headers HTML
     $headers = ['Content-Type: text/html; charset=UTF-8'];
 
-    // Enviar el correo (sin adjuntos)
+    // Log básico
+    error_log('CC_CERT: Envío de email de certificados ' . wp_json_encode([
+        'to'         => $to,
+        'asunto'     => $asunto,
+        'links'      => count($pdf_links),
+        'btn_bg'     => $btn_bg,
+        'btn_text'   => $btn_text,
+    ]));
+
     return wp_mail($to, $asunto, $mensaje, $headers);
 }
