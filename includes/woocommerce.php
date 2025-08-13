@@ -20,7 +20,9 @@ add_action('plugins_loaded', function () {
     // Campos checkout
     add_filter('woocommerce_checkout_fields', 'cc_woo_cert_checkout_fields');
     add_action('woocommerce_checkout_process', 'cc_woo_cert_checkout_validate');
-    add_action('woocommerce_checkout_update_order_meta', 'cc_woo_cert_checkout_save', 10, 1);
+
+    // ✅ Guardar metadatos vía CRUD (compatible con HPOS)
+    add_action('woocommerce_checkout_create_order', 'cc_woo_cert_checkout_save_crud', 10, 2);
 
     // Mostrar en admin (orden)
     add_action('woocommerce_admin_order_data_after_billing_address', 'cc_woo_cert_admin_show_checkout_meta');
@@ -41,7 +43,7 @@ function cc_woo_cert_checkout_fields( $fields ) {
         'priority'    => 120,
         'options'     => [
             ''    => __('Selecciona…', 'certificados-plugin'),
-            'CC'  => 'Cédula de Ciudadanía',
+            'CC'  => 'Cédula de ciudadanía',
             'CE'  => 'Cédula de extranjería',
             'TI'  => 'Tarjeta de identidad',
             'PP'  => 'Pasaporte',
@@ -72,16 +74,18 @@ function cc_woo_cert_checkout_validate() {
 }
 
 /**
- * Guardar metadatos del pedido.
+ * ✅ Guardar metadatos del pedido usando CRUD (HPOS-safe).
  */
-function cc_woo_cert_checkout_save( $order_id ) {
-    $type   = isset($_POST['cc_doc_type']) ? sanitize_text_field($_POST['cc_doc_type']) : '';
+function cc_woo_cert_checkout_save_crud( $order, $data ) {
+    $type   = isset($_POST['cc_doc_type'])   ? sanitize_text_field($_POST['cc_doc_type'])   : '';
     $number = isset($_POST['cc_doc_number']) ? sanitize_text_field($_POST['cc_doc_number']) : '';
 
-    if ( $type )   update_post_meta( $order_id, '_cc_doc_type', $type );
-    if ( $number ) update_post_meta( $order_id, '_cc_doc_number', $number );
+    // Guarda en meta del pedido (no uses update_post_meta con HPOS)
+    if ( $type !== '' )   { $order->update_meta_data( '_cc_doc_type',   $type ); }
+    if ( $number !== '' ) { $order->update_meta_data( '_cc_doc_number', $number ); }
 
-    error_log('CC_CERT: Checkout doc meta guardado ' . wp_json_encode(['order_id' => $order_id, 'type' => $type]));
+    $oid = $order->get_id() ? $order->get_id() : 0;
+    error_log('CC_CERT: Checkout doc meta (CRUD) ' . wp_json_encode(['order_id' => $oid, 'type' => $type, 'number' => $number]));
 }
 
 /**
@@ -142,12 +146,12 @@ function cc_woo_cert_maybe_generate_for_order( $order_id ) {
 
 /**
  * Lógica principal de generación para una orden (Woo).
- * Aporta los campos que la plantilla espera: tipo_documento, fecha_expedicion, curso_tipo, vigencia_certificado, intensidad_horaria.
+ * Aporta los campos que la plantilla espera: tipo_documento, documento, fecha_expedicion, curso_tipo, vigencia_certificado, intensidad_horaria.
  */
 function cc_woo_cert_generate_for_order( WC_Order $order, $empresa_id ) {
     $pdf_links = [];
 
-    // Persona (desde checkout)
+    // Persona (desde meta del pedido)
     $doc_type_raw = (string) $order->get_meta('_cc_doc_type');   // CC / CE / TI / PP
     $doc_number   = (string) $order->get_meta('_cc_doc_number'); // puede venir con puntos/espacios
 
@@ -163,13 +167,13 @@ function cc_woo_cert_generate_for_order( WC_Order $order, $empresa_id ) {
     ];
     $tipo_documento   = isset($doc_map[$doc_type_raw]) ? $doc_map[$doc_type_raw] : $doc_type_raw;
 
-    // Formato requerido: día/mes/año
+    // Formato requerido: dd/mm/yyyy
     $fecha_expedicion = date_i18n('d/m/Y', current_time('timestamp'));
 
     $persona = [
         'nombre'           => trim($order->get_billing_first_name() . ' ' . $order->get_billing_last_name()),
-        'documento'        => $doc_number_clean,   // <- la plantilla imprime solo el número
-        'tipo_documento'   => $tipo_documento,     // <- la plantilla imprime la etiqueta
+        'documento'        => $doc_number_clean,
+        'tipo_documento'   => $tipo_documento,
         'fecha_expedicion' => $fecha_expedicion,
         'email'            => $order->get_billing_email(),
     ];
@@ -282,7 +286,6 @@ function cc_woo_cert_generate_for_order( WC_Order $order, $empresa_id ) {
 
     return [ 'ok' => false, 'error' => 'Sin PDFs o cc_enviar_certificados() no disponible' ];
 }
-
 
 /**
  * Utilidad: obtener el primer meta que exista de una lista de claves.
