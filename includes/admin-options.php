@@ -187,10 +187,19 @@ add_action('admin_init', function () {
         'sanitize_callback' => 'cc_sanitize_and_store_gcs_key',
     ]);
 
-    // === NUEVO: Color empresa (hex) ===
+    // Color empresa (hex)
     register_setting('cc_certificados_settings_group', 'cc_certificados_color_empresa', [
         'sanitize_callback' => 'cc_sanitize_hex_color_option',
         'default'           => '#000000',
+    ]);
+
+    // Tamaño de lote de la migración (por cron)
+    register_setting('cc_certificados_settings_group', 'cc_mig_batch_size', [
+        'sanitize_callback' => function( $v ) {
+            $n = absint($v);
+            return $n > 0 ? $n : 300; // default 300
+        },
+        'default' => 300,
     ]);
 });
 
@@ -206,6 +215,26 @@ function cc_certificados_settings_page_cb() {
     $woo_tipo_id    = class_exists('WooCommerce') ? absint( get_option('cc_certificados_woo_tipo_cert_empresa_id', 0) ) : 0;
 
     $color_empresa  = get_option('cc_certificados_color_empresa', '#000000');
+
+    // ===== Datos de MIGRACIÓN (status actual) =====
+    $mig_running   = get_option('cc_mig_running', '0') === '1';
+    $mig_last_id   = (int) get_option('cc_mig_last_id', 0);
+    $mig_batch     = (int) get_option('cc_mig_batch_size', 300);
+    $mig_done      = (int) get_option('cc_mig_done_count', 0);
+    $mig_errors    = (int) get_option('cc_mig_error_count', 0);
+    $mig_started   = (int) get_option('cc_mig_started_at', 0);
+    $mig_started_s = $mig_started ? date_i18n('Y-m-d H:i:s', $mig_started) : '—';
+    $next_ts       = wp_next_scheduled('cc_cert_migrate_gcs_event');
+    $next_s        = $next_ts ? date_i18n('Y-m-d H:i:s', $next_ts) : '—';
+    $counts        = wp_count_posts('certificado');
+    $total_cert    = $counts && isset($counts->publish) ? (int) $counts->publish : 0;
+    $cfg_ok        = $bucket && $key_path && file_exists($key_path);
+
+    // URLs de control admin-post (con nonce)
+    $nonce      = wp_create_nonce('cc_mig_nonce');
+    $start_url  = admin_url('admin-post.php?action=cc_mig_start&nonce='  . $nonce);
+    $stop_url   = admin_url('admin-post.php?action=cc_mig_stop&nonce='   . $nonce);
+    $status_url = admin_url('admin-post.php?action=cc_mig_status&nonce=' . $nonce);
     ?>
     <div class="wrap">
         <h1>Ajustes de Certificados</h1>
@@ -223,7 +252,7 @@ function cc_certificados_settings_page_cb() {
                     <td><input type="text" name="cc_certificados_nit_empresa" value="<?php echo esc_attr($nit_empresa); ?>" class="regular-text" /></td>
                 </tr>
 
-                <!-- NUEVO: Color empresa -->
+                <!-- Color empresa -->
                 <tr valign="top">
                     <th scope="row">Color empresa</th>
                     <td>
@@ -359,6 +388,69 @@ function cc_certificados_settings_page_cb() {
                     </tr>
                 </table>
             </div>
+
+            <!-- ===== MIGRACIÓN A GCS ===== -->
+            <hr>
+            <h2 style="margin-top:24px;">Migración de PDFs a Google Cloud Storage</h2>
+
+            <?php if ( ! $cfg_ok ) : ?>
+                <div class="notice notice-error" style="padding:12px;">
+                    <p><strong>Config incompleta:</strong> verifica el <em>Bucket</em> y el <em>Key JSON</em> (archivo existente en el servidor) antes de iniciar.</p>
+                    <p>Bucket actual: <code><?php echo esc_html($bucket ?: '—'); ?></code><br>
+                       Key path: <code><?php echo esc_html($key_path ?: '—'); ?></code></p>
+                </div>
+            <?php endif; ?>
+
+            <table class="form-table" role="presentation">
+                <tr>
+                    <th scope="row">Estado</th>
+                    <td>
+                        <?php if ( $mig_running ) : ?>
+                            <span style="display:inline-block;background:#2271b1;color:#fff;padding:2px 8px;border-radius:4px;">En ejecución</span>
+                        <?php else : ?>
+                            <span style="display:inline-block;background:#777;color:#fff;padding:2px 8px;border-radius:4px;">Detenido</span>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">Último ID procesado</th>
+                    <td><code><?php echo esc_html( (string) $mig_last_id ); ?></code></td>
+                </tr>
+                <tr>
+                    <th scope="row">Procesados / Errores</th>
+                    <td><?php echo esc_html($mig_done); ?> ok &nbsp;|&nbsp; <?php echo esc_html($mig_errors); ?> errores</td>
+                </tr>
+                <tr>
+                    <th scope="row">Total certificados (publicados)</th>
+                    <td><?php echo esc_html( (string) $total_cert ); ?></td>
+                </tr>
+                <tr>
+                    <th scope="row">Tamaño del lote</th>
+                    <td>
+                        <input type="number" min="1" name="cc_mig_batch_size" value="<?php echo esc_attr( $mig_batch ); ?>" />
+                        <p class="description">Cantidad de posts procesados por tick de cron (cada ~1 min). Guarda la página para aplicar el cambio.</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">Iniciado</th>
+                    <td><?php echo esc_html($mig_started_s); ?></td>
+                </tr>
+                <tr>
+                    <th scope="row">Siguiente ejecución (cron)</th>
+                    <td><?php echo esc_html($next_s); ?></td>
+                </tr>
+            </table>
+
+            <p style="margin: 16px 0;">
+                <a href="<?php echo esc_url( $start_url ); ?>"
+                   class="button button-primary"
+                   <?php echo $cfg_ok ? '' : 'aria-disabled="true" onclick="return false;"'; ?>>
+                    Iniciar migración
+                </a>
+                <a href="<?php echo esc_url( $stop_url ); ?>" class="button">Detener</a>
+                <a href="<?php echo esc_url( $status_url ); ?>" class="button button-secondary">Ver estado (log)</a>
+            </p>
+            <!-- ===== FIN MIGRACIÓN A GCS ===== -->
 
             <script>
             document.addEventListener('DOMContentLoaded', function() {
