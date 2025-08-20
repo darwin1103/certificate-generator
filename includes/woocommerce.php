@@ -21,19 +21,19 @@ add_action('plugins_loaded', function () {
     add_filter('woocommerce_checkout_fields', 'cc_woo_cert_checkout_fields');
     add_action('woocommerce_checkout_process', 'cc_woo_cert_checkout_validate');
 
-    // ✅ Guardar metadatos vía CRUD (compatible con HPOS)
+    // Guardar metadatos del pedido vía CRUD (HPOS-safe)
     add_action('woocommerce_checkout_create_order', 'cc_woo_cert_checkout_save_crud', 10, 2);
 
     // Mostrar en admin (orden)
     add_action('woocommerce_admin_order_data_after_billing_address', 'cc_woo_cert_admin_show_checkout_meta');
 
-    // Disparadores de generación (idempotentes)
-    add_action('woocommerce_payment_complete', 'cc_woo_cert_maybe_generate_for_order', 20, 1);
-    add_action('woocommerce_order_status_processing', 'cc_woo_cert_maybe_generate_for_order', 20, 1); // pagos manuales
+    // Disparadores post-pago (idempotentes)
+    add_action('woocommerce_payment_complete', 'cc_woo_cert_handle_post_payment', 20, 1);
+    add_action('woocommerce_order_status_processing', 'cc_woo_cert_handle_post_payment', 20, 1);
 });
 
 /**
- * Campos adicionales en checkout: tipo y número de documento
+ * Campos adicionales en checkout: tipo y número de documento.
  */
 function cc_woo_cert_checkout_fields( $fields ) {
     $fields['billing']['cc_doc_type'] = [
@@ -74,13 +74,12 @@ function cc_woo_cert_checkout_validate() {
 }
 
 /**
- * ✅ Guardar metadatos del pedido usando CRUD (HPOS-safe).
+ * Guardar metadatos del pedido usando CRUD (HPOS-safe).
  */
 function cc_woo_cert_checkout_save_crud( $order, $data ) {
     $type   = isset($_POST['cc_doc_type'])   ? sanitize_text_field($_POST['cc_doc_type'])   : '';
     $number = isset($_POST['cc_doc_number']) ? sanitize_text_field($_POST['cc_doc_number']) : '';
 
-    // Guarda en meta del pedido (no uses update_post_meta con HPOS)
     if ( $type !== '' )   { $order->update_meta_data( '_cc_doc_type',   $type ); }
     if ( $number !== '' ) { $order->update_meta_data( '_cc_doc_number', $number ); }
 
@@ -101,9 +100,13 @@ function cc_woo_cert_admin_show_checkout_meta( $order ) {
 }
 
 /**
- * Punto de entrada: generar certificados si procede. Idempotente.
+ * Entrada única post-pago (payment_complete y status=processing).
+ * - Idempotente por bandera _cc_certs_generated
+ * - Lock _cc_certs_lock para evitar doble corrida en hooks simultáneos
+ * - Añade UNA nota
+ * - Si está en processing al terminar, pasa a completed
  */
-function cc_woo_cert_maybe_generate_for_order( $order_id ) {
+function cc_woo_cert_handle_post_payment( $order_id ) {
     try {
         $order = wc_get_order( $order_id );
         if ( ! $order ) {
@@ -111,42 +114,108 @@ function cc_woo_cert_maybe_generate_for_order( $order_id ) {
             return;
         }
 
-        // Evitar duplicados
+        error_log('CC_CERT: Post-pago hook disparado ' . wp_json_encode([
+            'order_id' => $order_id,
+            'status'   => $order->get_status()
+        ]));
+
+        // 1) Idempotencia: ¿ya generados?
         if ( $order->get_meta('_cc_certs_generated') ) {
-            error_log('CC_CERT: Certificados ya generados para la orden ' . wp_json_encode(['order_id' => $order_id]));
+            error_log('CC_CERT: YA generados (flag presente) ' . wp_json_encode(['order_id' => $order_id]));
             return;
         }
 
-        // Empresa/tipo configurado
+        // 2) Lock para evitar duplicados entre ambos hooks
+        $lock_key = '_cc_certs_lock';
+        $lock     = (string) $order->get_meta( $lock_key );
+        if ( $lock ) {
+            error_log('CC_CERT: Lock activo, abortando ejecución duplicada ' . wp_json_encode([
+                'order_id' => $order_id,
+                'lock'     => $lock
+            ]));
+            return;
+        }
+        $order->update_meta_data( $lock_key, (string) time() );
+        $order->save();
+
+        // 3) Verificar empresa configurada
         $empresa_id = absint( get_option('cc_certificados_woo_tipo_cert_empresa_id', 0) );
         if ( ! $empresa_id ) {
-            error_log('CC_CERT: Option empresa para Woo no definida');
+            error_log('CC_CERT: Option empresa Woo no definida. Liberando lock.');
+            $order->delete_meta_data( $lock_key );
+            $order->save();
             return;
         }
 
+        // 4) Generar certificados
         $result = cc_woo_cert_generate_for_order( $order, $empresa_id );
 
         if ( ! empty($result['ok']) ) {
-            // Marca de idempotencia
+
+            // 4.1) Marcar idempotencia antes de tocar estados
             $order->update_meta_data('_cc_certs_generated', time());
-            // Completar orden si aún no está completada
-            if ( $order->get_status() !== 'completed' ) {
-                $order->update_status('completed', 'Certificados generados y enviados.');
+
+            // 4.2) Una nota en la orden
+            $note = sprintf(
+                'Certificados generados y enviados (%d archivo%s).',
+                count( $result['pdf_links'] ?? [] ),
+                ( (count($result['pdf_links'] ?? []) === 1) ? '' : 's' )
+            );
+            $order->add_order_note( $note );
+
+            // 4.3) Si está en processing, pasar a completed
+            if ( $order->has_status('processing') ) {
+                $order->update_status(
+                    'completed',
+                    'Certificados generados y enviados automáticamente.'
+                );
             }
+
+            // 4.4) Limpiar lock y guardar
+            $order->delete_meta_data( $lock_key );
             $order->save();
-            error_log('CC_CERT: Certificados generados y orden completada ' . wp_json_encode(['order_id' => $order_id]));
+
+            error_log('CC_CERT: OK generación y envío. ' . wp_json_encode([
+                'order_id'  => $order_id,
+                'completed' => $order->has_status('completed'),
+                'links'     => $result['pdf_links'] ?? []
+            ]));
+
         } else {
-            error_log('CC_CERT: Fallo al generar/enviar certificados ' . wp_json_encode(['order_id' => $order_id, 'error' => $result['error'] ?? 'unknown']));
+
+            // Fallo: limpiar lock, NO ponemos bandera generada
+            $order->delete_meta_data( $lock_key );
+            $order->save();
+
+            error_log('CC_CERT: Fallo en generación/envío ' . wp_json_encode([
+                'order_id' => $order_id,
+                'error'    => $result['error'] ?? 'unknown'
+            ]));
         }
 
     } catch ( \Throwable $e ) {
-        error_log('CC_CERT: Excepción en maybe_generate_for_order ' . wp_json_encode(['order_id' => $order_id, 'msg' => $e->getMessage()]));
+        // Intentar liberar lock si existe
+        try {
+            $order = wc_get_order( $order_id );
+            if ( $order ) {
+                $order->delete_meta_data('_cc_certs_lock');
+                $order->save();
+            }
+        } catch ( \Throwable $e2 ) {
+            // noop
+        }
+
+        error_log('CC_CERT: EXCEPCIÓN en handle_post_payment ' . wp_json_encode([
+            'order_id' => $order_id,
+            'msg'      => $e->getMessage()
+        ]));
     }
 }
 
 /**
  * Lógica principal de generación para una orden (Woo).
- * Aporta los campos que la plantilla espera: tipo_documento, documento, fecha_expedicion, curso_tipo, vigencia_certificado, intensidad_horaria.
+ * Aporta los campos que la plantilla espera: tipo_documento, documento, fecha_expedicion,
+ * curso_tipo (desde meta _tipo_certificado del producto), vigencia_certificado, intensidad_horaria.
  */
 function cc_woo_cert_generate_for_order( WC_Order $order, $empresa_id ) {
     $pdf_links = [];
@@ -178,7 +247,7 @@ function cc_woo_cert_generate_for_order( WC_Order $order, $empresa_id ) {
         'email'            => $order->get_billing_email(),
     ];
 
-    // Empresa
+    // Empresa / emailing
     $empresa_titulo  = get_the_title($empresa_id);
     $empresa_asunto  = cc_meta_first($empresa_id, ['_email_subject', 'email_subject'], 'Certificados - '.$empresa_titulo);
     $contenido_email = cc_meta_first($empresa_id, ['_contenido_email','contenido_email'], 'Adjuntamos tus certificados.');
@@ -190,13 +259,13 @@ function cc_woo_cert_generate_for_order( WC_Order $order, $empresa_id ) {
     }
 
     $empresa = [
-        'empresa_titulo' => $empresa_titulo,
-        'empresa_asunto' => $empresa_asunto,
-        'contenido_email'=> $contenido_email,
-        'empresa_imagen' => $empresa_imagen,
+        'empresa_titulo'  => $empresa_titulo,
+        'empresa_asunto'  => $empresa_asunto,
+        'contenido_email' => $contenido_email,
+        'empresa_imagen'  => $empresa_imagen,
     ];
 
-    // Base de escritura
+    // Carpeta base (por si se guarda local antes de subir a GCS)
     $uploads   = wp_upload_dir();
     $base_pdfs = trailingslashit( $uploads['basedir'] ) . 'certificados-plugin/pdfs/';
     if ( ! file_exists( $base_pdfs ) ) {
@@ -212,13 +281,16 @@ function cc_woo_cert_generate_for_order( WC_Order $order, $empresa_id ) {
 
         // Permitir filtrar si un producto genera certificado
         $should = apply_filters('cc_cert_should_generate_for_product', true, $product_id, $order);
-        if ( ! $should ) { continue; }
+        if ( ! $should ) {
+            error_log('CC_CERT: Producto omitido por filtro ' . wp_json_encode(['order_id' => $order->get_id(), 'product_id' => $product_id]));
+            continue;
+        }
 
         // === CURSO: toma 'curso_tipo' del post meta _tipo_certificado del PRODUCTO ===
         $curso_tipo_meta = get_post_meta( $product_id, '_tipo_certificado', true );
         $curso_tipo = $curso_tipo_meta !== '' ? sanitize_text_field( $curso_tipo_meta ) : $empresa_titulo;
 
-        // Resto de metadatos del curso
+        // Otros metadatos del curso
         $int_num              = get_post_meta( $product_id, '_intensidad_horaria', true );
         $intensidad_horaria   = $int_num ? ( $int_num . ' horas' ) : '';
         $vigencia_certificado = get_post_meta( $product_id, 'fecha_expiracion_certificado', true );
@@ -226,13 +298,13 @@ function cc_woo_cert_generate_for_order( WC_Order $order, $empresa_id ) {
         $curso = [
             'curso_id'             => $product_id,
             'curso_nombre'         => $product->get_name(),
-            'curso_tipo'           => $curso_tipo,            // <- ahora viene de _tipo_certificado
+            'curso_tipo'           => $curso_tipo,
             'intensidad_horaria'   => $intensidad_horaria,
             'vigencia_certificado' => $vigencia_certificado,
         ];
 
         try {
-            // DEBUG: verifica exactamente lo que se envía a la plantilla
+            // DEBUG: verificar payload hacia plantilla
             error_log('CC_CERT: Datos para plantilla ' . wp_json_encode([
                 'persona' => $persona,
                 'curso'   => $curso,
@@ -246,7 +318,7 @@ function cc_woo_cert_generate_for_order( WC_Order $order, $empresa_id ) {
                 continue;
             }
 
-            // 2) Guardar (GCS o local)
+            // 2) Guardar (GCS o local) usando helper del plugin
             $slug_prod = sanitize_title( $curso['curso_nombre'] ?: ('producto-'.$product_id) );
             $slug_user = sanitize_title( $persona['nombre'] );
             $filename  = sanitize_file_name( 'certificado-' . $slug_user . '-' . $slug_prod . '-' . time() . '.pdf' );
@@ -265,7 +337,12 @@ function cc_woo_cert_generate_for_order( WC_Order $order, $empresa_id ) {
 
             // 3) Crear post tipo "certificado"
             if ( function_exists('cc_crear_post_certificado') ) {
-                cc_crear_post_certificado( $persona, $curso, $pdf_url, $empresa );
+                $post_id = cc_crear_post_certificado( $persona, $curso, $pdf_url, $empresa );
+                error_log('CC_CERT: Certificado creado ' . wp_json_encode([
+                    'id'                => $post_id,
+                    'fecha_expedicion'  => $persona['fecha_expedicion'],
+                    'vigencia'          => $curso['vigencia_certificado'],
+                ]));
             } else {
                 error_log('CC_CERT: cc_crear_post_certificado no existe');
             }
@@ -281,8 +358,19 @@ function cc_woo_cert_generate_for_order( WC_Order $order, $empresa_id ) {
         }
     }
 
-    // Enviar email
+    // 4) Enviar email con enlaces
     if ( $pdf_links && function_exists('cc_enviar_certificados') ) {
+        // Log antes de enviar (incluye colores establecidos en option si tu función los usa)
+        $btn_bg   = get_option('cc_certificados_color_empresa', '#1e73be');
+        $btn_text = '#ffffff';
+        error_log('CC_CERT: Envío de email de certificados ' . wp_json_encode([
+            'to'     => $persona['email'],
+            'asunto' => $empresa['empresa_asunto'],
+            'links'  => count($pdf_links),
+            'btn_bg' => $btn_bg,
+            'btn_text' => $btn_text,
+        ]));
+
         $ok = cc_enviar_certificados( $persona['email'], $empresa['contenido_email'], $pdf_links, $empresa['empresa_asunto'] );
         return [ 'ok' => (bool) $ok, 'pdf_links' => $pdf_links ];
     }
